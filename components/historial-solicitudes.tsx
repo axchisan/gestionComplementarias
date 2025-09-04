@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, Download, Eye, Edit, FileText, Calendar, Clock, User, Filter, FileSpreadsheet } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useAuth } from "@/lib/auth-context"
 
 interface Solicitud {
   id: string
@@ -41,26 +42,52 @@ const estadoLabels = {
 }
 
 export function HistorialSolicitudes() {
+  const { user, token } = useAuth()
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedEstado, setSelectedEstado] = useState("todas")
   const [selectedTipo, setSelectedTipo] = useState("todos")
   const [selectedYear, setSelectedYear] = useState("todos")
 
   useEffect(() => {
-    // Cargar solicitudes del localStorage
-    const solicitudesGuardadas = JSON.parse(localStorage.getItem("sena_solicitudes") || "[]")
-    setSolicitudes(solicitudesGuardadas)
-  }, [])
+    const fetchSolicitudes = async () => {
+      if (!token || !user) return
+
+      try {
+        setLoading(true)
+        const response = await fetch("/api/solicitudes", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error("Error al cargar las solicitudes")
+        }
+
+        const data = await response.json()
+        setSolicitudes(data.solicitudes || [])
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error desconocido")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchSolicitudes()
+  }, [token, user])
 
   const filteredSolicitudes = solicitudes.filter((solicitud) => {
     const matchesSearch =
-      solicitud.nombreCurso.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      solicitud.numeroFicha.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      solicitud.id.toLowerCase().includes(searchTerm.toLowerCase())
+      (solicitud.nombreCurso?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+      (solicitud.numeroFicha?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+      (solicitud.id?.toLowerCase() || "").includes(searchTerm.toLowerCase())
 
     const matchesEstado = selectedEstado === "todas" || solicitud.estado === selectedEstado
-    const matchesTipo = selectedTipo === "todos" || solicitud.tipoFormacion.toLowerCase() === selectedTipo
+    const matchesTipo = selectedTipo === "todos" || (solicitud.tipoFormacion?.toLowerCase() || "") === selectedTipo
 
     const year = new Date(solicitud.fechaSolicitud).getFullYear().toString()
     const matchesYear = selectedYear === "todos" || year === selectedYear
@@ -68,19 +95,70 @@ export function HistorialSolicitudes() {
     return matchesSearch && matchesEstado && matchesTipo && matchesYear
   })
 
-  const handleExportPDF = (solicitud: Solicitud) => {
-    console.log("Exportar PDF:", solicitud.id)
-    // Aquí iría la lógica para generar PDF
+  const handleExportPDF = async (solicitud: Solicitud) => {
+    try {
+      const response = await fetch(`/api/solicitudes/${solicitud.id}/export?format=pdf`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `solicitud-${solicitud.numeroFicha}.pdf`
+        a.click()
+        window.URL.revokeObjectURL(url)
+      }
+    } catch (error) {
+      console.error("Error al exportar PDF:", error)
+    }
   }
 
-  const handleExportExcel = (solicitud: Solicitud) => {
-    console.log("Exportar Excel:", solicitud.id)
-    // Aquí iría la lógica para generar Excel
+  const handleExportExcel = async (solicitud: Solicitud) => {
+    try {
+      const response = await fetch(`/api/solicitudes/${solicitud.id}/export?format=excel`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `solicitud-${solicitud.numeroFicha}.xlsx`
+        a.click()
+        window.URL.revokeObjectURL(url)
+      }
+    } catch (error) {
+      console.error("Error al exportar Excel:", error)
+    }
   }
 
-  const handleExportAll = (formato: "pdf" | "excel") => {
-    console.log(`Exportar todas las solicitudes en formato ${formato}`)
-    // Aquí iría la lógica para exportar todas las solicitudes
+  const handleExportAll = async (formato: "pdf" | "excel") => {
+    try {
+      const response = await fetch(`/api/solicitudes/export-all?format=${formato}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `todas-solicitudes.${formato === "pdf" ? "pdf" : "xlsx"}`
+        a.click()
+        window.URL.revokeObjectURL(url)
+      }
+    } catch (error) {
+      console.error(`Error al exportar ${formato}:`, error)
+    }
   }
 
   const getEstadisticas = () => {
@@ -94,6 +172,34 @@ export function HistorialSolicitudes() {
   }
 
   const stats = getEstadisticas()
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-12 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando solicitudes...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-12 text-center">
+          <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <FileText className="h-12 w-12 text-red-600" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Error al cargar solicitudes</h3>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()} className="bg-green-600 hover:bg-green-700 text-white">
+            Reintentar
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -181,7 +287,7 @@ export function HistorialSolicitudes() {
                   </SelectContent>
                 </Select>
 
-                <Button variant="outline" className="flex items-center space-x-2">
+                <Button variant="outline" className="flex items-center space-x-2 bg-transparent">
                   <Filter className="h-4 w-4" />
                   <span>Limpiar Filtros</span>
                 </Button>

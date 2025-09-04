@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,34 +9,63 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon, Save, Send, FileText, Plus, X, Download, FileSpreadsheet } from "lucide-react"
+import { CalendarIcon, Save, Send, FileText, Plus, X, Search, Clock } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { Progress } from "@/components/ui/progress"
+import { useAuth } from "@/lib/auth-context"
+import { Badge } from "@/components/ui/badge"
 
-interface FormData {
-  // Información del Instructor
-  instructorNombre: string
-  instructorCedula: string
-  instructorEmail: string
-  instructorTelefono: string
-  instructorCentro: string
-  instructorEspecialidad: string
-
-  // Información del Curso
-  nombreCurso: string
-  numeroFicha: string
+interface Programa {
+  id: string
+  codigo: string
+  nombre: string
   tipoFormacion: string
   modalidad: string
-  duracionHoras: string
+  duracionHoras: number
+  cupoAprendices: number
+  descripcion?: string
+  centro: {
+    nombre: string
+    codigo: string
+  }
+  objetivos: Array<{
+    id: string
+    descripcion: string
+    orden: number
+  }>
+  competencias: Array<{
+    id: string
+    descripcion: string
+    codigo?: string
+  }>
+  resultados: Array<{
+    id: string
+    descripcion: string
+    codigo?: string
+  }>
+}
+
+interface HorarioSolicitud {
+  diaSemana: string
+  horaInicio: string
+  horaFin: string
+}
+
+interface FormData {
+  // Información del Programa Seleccionado
+  programaId: string
+  programaSeleccionado: Programa | null
+
+  // Información del Curso (fechas y configuración)
   fechaInicio: Date | undefined
   fechaFin: Date | undefined
-  numeroAprendices: string
+  numeroAprendices: number
+  horarios: HorarioSolicitud[]
 
   // Justificación y Competencias
   justificacion: string
-  objetivos: string[]
-  competencias: string[]
+  objetivosPersonalizados: string[]
   resultadosEsperados: string
 
   // Recursos y Metodología
@@ -51,25 +80,32 @@ interface FormData {
   confirmaVeracidad: boolean
 }
 
+const DIAS_SEMANA = [
+  { value: "LUNES", label: "Lunes" },
+  { value: "MARTES", label: "Martes" },
+  { value: "MIERCOLES", label: "Miércoles" },
+  { value: "JUEVES", label: "Jueves" },
+  { value: "VIERNES", label: "Viernes" },
+  { value: "SABADO", label: "Sábado" },
+  { value: "DOMINGO", label: "Domingo" },
+]
+
+const HORAS_DISPONIBLES = Array.from({ length: 13 }, (_, i) => {
+  const hora = i + 6 // Desde las 6:00 hasta las 18:00
+  return `${hora.toString().padStart(2, "0")}:00`
+})
+
 export function SolicitudForm() {
+  const { user, token } = useAuth()
   const [formData, setFormData] = useState<FormData>({
-    instructorNombre: "",
-    instructorCedula: "",
-    instructorEmail: "",
-    instructorTelefono: "",
-    instructorCentro: "Centro de Gestión Agroempresarial",
-    instructorEspecialidad: "",
-    nombreCurso: "",
-    numeroFicha: "",
-    tipoFormacion: "",
-    modalidad: "",
-    duracionHoras: "",
+    programaId: "",
+    programaSeleccionado: null,
     fechaInicio: undefined,
     fechaFin: undefined,
-    numeroAprendices: "",
+    numeroAprendices: 0,
+    horarios: [],
     justificacion: "",
-    objetivos: [""],
-    competencias: [""],
+    objetivosPersonalizados: [""],
     resultadosEsperados: "",
     recursosNecesarios: "",
     metodologia: "",
@@ -83,27 +119,111 @@ export function SolicitudForm() {
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle")
+  const [programas, setProgramas] = useState<Programa[]>([])
+  const [loadingProgramas, setLoadingProgramas] = useState(false)
+  const [searchPrograma, setSearchPrograma] = useState("")
+  const [error, setError] = useState("")
   const totalSteps = 5
+
+  useEffect(() => {
+    if (user && token) {
+      loadProgramas()
+    }
+  }, [user, token])
+
+  const loadProgramas = async () => {
+    setLoadingProgramas(true)
+    try {
+      const response = await fetch(`/api/programas?search=${searchPrograma}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setProgramas(data.programas)
+      } else {
+        setError("Error al cargar los programas disponibles")
+      }
+    } catch (error) {
+      setError("Error de conexión al cargar programas")
+    } finally {
+      setLoadingProgramas(false)
+    }
+  }
 
   const handleInputChange = (field: keyof FormData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const addArrayItem = (field: "objetivos" | "competencias") => {
+  const handleProgramaSelect = async (programaId: string) => {
+    try {
+      const response = await fetch(`/api/programas/${programaId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setFormData((prev) => ({
+          ...prev,
+          programaId,
+          programaSeleccionado: data.programa,
+          numeroAprendices: data.programa.cupoAprendices,
+          horarios: [],
+        }))
+      }
+    } catch (error) {
+      setError("Error al cargar detalles del programa")
+    }
+  }
+
+  const addHorario = () => {
+    setFormData((prev) => ({
+      ...prev,
+      horarios: [...prev.horarios, { diaSemana: "LUNES", horaInicio: "08:00", horaFin: "12:00" }],
+    }))
+  }
+
+  const updateHorario = (index: number, field: keyof HorarioSolicitud, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      horarios: prev.horarios.map((horario, i) => (i === index ? { ...horario, [field]: value } : horario)),
+    }))
+  }
+
+  const removeHorario = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      horarios: prev.horarios.filter((_, i) => i !== index),
+    }))
+  }
+
+  const calculateTotalHours = () => {
+    return formData.horarios.reduce((total, horario) => {
+      const inicio = Number.parseInt(horario.horaInicio.split(":")[0])
+      const fin = Number.parseInt(horario.horaFin.split(":")[0])
+      return total + (fin - inicio)
+    }, 0)
+  }
+
+  const addArrayItem = (field: "objetivosPersonalizados") => {
     setFormData((prev) => ({
       ...prev,
       [field]: [...prev[field], ""],
     }))
   }
 
-  const updateArrayItem = (field: "objetivos" | "competencias", index: number, value: string) => {
+  const updateArrayItem = (field: "objetivosPersonalizados", index: number, value: string) => {
     setFormData((prev) => ({
       ...prev,
       [field]: prev[field].map((item, i) => (i === index ? value : item)),
     }))
   }
 
-  const removeArrayItem = (field: "objetivos" | "competencias", index: number) => {
+  const removeArrayItem = (field: "objetivosPersonalizados", index: number) => {
     setFormData((prev) => ({
       ...prev,
       [field]: prev[field].filter((_, i) => i !== index),
@@ -113,11 +233,11 @@ export function SolicitudForm() {
   const validateCurrentStep = () => {
     switch (currentStep) {
       case 1:
-        return formData.instructorNombre && formData.instructorCedula && formData.instructorEmail
+        return !!formData.programaSeleccionado
       case 2:
-        return formData.nombreCurso && formData.numeroFicha && formData.tipoFormacion && formData.modalidad
+        return formData.fechaInicio && formData.fechaFin && formData.horarios.length > 0
       case 3:
-        return formData.justificacion && formData.objetivos.some((obj) => obj.trim())
+        return formData.justificacion && formData.objetivosPersonalizados.some((obj) => obj.trim())
       case 4:
         return formData.metodologia && formData.criteriosEvaluacion
       case 5:
@@ -129,56 +249,60 @@ export function SolicitudForm() {
 
   const handleSubmit = async (isDraft = false) => {
     setIsSubmitting(true)
-    try {
-      // Simular envío al servidor
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+    setError("")
 
+    try {
       const solicitudData = {
-        ...formData,
-        id: `SOL-${Date.now()}`,
-        fechaSolicitud: new Date().toISOString(),
-        estado: isDraft ? "borrador" : "pendiente",
-        version: "1.0",
+        programaId: formData.programaId,
+        fechaInicio: formData.fechaInicio?.toISOString(),
+        fechaFin: formData.fechaFin?.toISOString(),
+        numeroAprendices: formData.numeroAprendices,
+        horarios: formData.horarios,
+        justificacion: formData.justificacion,
+        objetivosPersonalizados: formData.objetivosPersonalizados.filter((obj) => obj.trim()),
+        resultadosEsperados: formData.resultadosEsperados,
+        metodologia: formData.metodologia,
+        recursosNecesarios: formData.recursosNecesarios,
+        criteriosEvaluacion: formData.criteriosEvaluacion,
+        observaciones: formData.observaciones,
+        cumpleRequisitos: formData.cumpleRequisitos,
+        autorizaUsoInfo: formData.autorizaUsoInfo,
+        confirmaVeracidad: formData.confirmaVeracidad,
+        isDraft,
       }
 
-      // Guardar en localStorage para simular persistencia
-      const solicitudes = JSON.parse(localStorage.getItem("sena_solicitudes") || "[]")
-      solicitudes.push(solicitudData)
-      localStorage.setItem("sena_solicitudes", JSON.stringify(solicitudes))
+      const response = await fetch("/api/solicitudes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(solicitudData),
+      })
 
-      setSubmitStatus("success")
+      const data = await response.json()
 
-      if (!isDraft) {
-        // Redirigir a la lista de solicitudes después de 2 segundos
-        setTimeout(() => {
-          window.location.href = "/mis-solicitudes"
-        }, 2000)
+      if (response.ok) {
+        setSubmitStatus("success")
+        if (!isDraft) {
+          setTimeout(() => {
+            window.location.href = "/mis-solicitudes"
+          }, 2000)
+        }
+      } else {
+        setError(data.error || "Error al enviar la solicitud")
       }
     } catch (error) {
-      setSubmitStatus("error")
+      setError("Error de conexión. Intenta nuevamente.")
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const handleExportPDF = () => {
-    console.log("Generando PDF de la solicitud...")
-    // Aquí iría la lógica para generar PDF
-  }
-
-  const handleExportExcel = () => {
-    console.log("Generando Excel de la solicitud...")
-    // Aquí iría la lógica para generar Excel
-  }
-
-  const getStepProgress = () => {
-    return (currentStep / totalSteps) * 100
-  }
-
   const steps = [
-    { number: 1, title: "Información Personal", description: "Datos del instructor solicitante" },
-    { number: 2, title: "Detalles del Programa", description: "Información del curso y ficha" },
-    { number: 3, title: "Justificación Académica", description: "Objetivos y competencias" },
+    { number: 1, title: "Selección de Programa", description: "Elige el programa de formación" },
+    { number: 2, title: "Configuración de Horarios", description: "Define fechas y horarios" },
+    { number: 3, title: "Justificación Académica", description: "Objetivos y justificación" },
     { number: 4, title: "Metodología y Recursos", description: "Planificación pedagógica" },
     { number: 5, title: "Validación y Envío", description: "Confirmaciones y envío final" },
   ]
@@ -196,13 +320,11 @@ export function SolicitudForm() {
             notificación por correo electrónico con el estado de su solicitud.
           </p>
           <div className="flex justify-center space-x-4">
-            <Button onClick={handleExportPDF} variant="outline">
-              <Download className="h-4 w-4 mr-2" />
-              Descargar PDF
-            </Button>
-            <Button onClick={handleExportExcel} variant="outline">
-              <FileSpreadsheet className="h-4 w-4 mr-2" />
-              Descargar Excel
+            <Button
+              onClick={() => (window.location.href = "/mis-solicitudes")}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Ver Mis Solicitudes
             </Button>
           </div>
         </CardContent>
@@ -222,7 +344,7 @@ export function SolicitudForm() {
                 {currentStep} de {totalSteps}
               </span>
             </div>
-            <Progress value={getStepProgress()} className="h-2" />
+            <Progress value={(currentStep / totalSteps) * 100} className="h-2" />
           </div>
 
           <div className="flex items-center justify-between">
@@ -256,6 +378,14 @@ export function SolicitudForm() {
         </CardContent>
       </Card>
 
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <p className="text-red-800 text-sm">{error}</p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Form Content */}
       <Card>
         <CardHeader>
@@ -266,161 +396,121 @@ export function SolicitudForm() {
           <CardDescription>{steps[currentStep - 1].description}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Step 1: Información Personal */}
+          {/* Step 1: Selección de Programa */}
           {currentStep === 1 && (
             <div className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Nombre Completo *</label>
-                  <Input
-                    value={formData.instructorNombre}
-                    onChange={(e) => handleInputChange("instructorNombre", e.target.value)}
-                    placeholder="Nombre completo del instructor"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Cédula de Ciudadanía *</label>
-                  <Input
-                    value={formData.instructorCedula}
-                    onChange={(e) => handleInputChange("instructorCedula", e.target.value)}
-                    placeholder="Número de cédula"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Correo Electrónico Institucional *
-                  </label>
-                  <Input
-                    type="email"
-                    value={formData.instructorEmail}
-                    onChange={(e) => handleInputChange("instructorEmail", e.target.value)}
-                    placeholder="correo@sena.edu.co"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Teléfono de Contacto</label>
-                  <Input
-                    value={formData.instructorTelefono}
-                    onChange={(e) => handleInputChange("instructorTelefono", e.target.value)}
-                    placeholder="+57 300 123 4567"
-                  />
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <h3 className="font-semibold text-blue-900 mb-2">Información del Instructor</h3>
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium text-blue-800">Nombre:</span>
+                    <p className="text-blue-700">{user?.name}</p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-blue-800">Centro:</span>
+                    <p className="text-blue-700">{user?.centro?.nombre}</p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-blue-800">Email:</span>
+                    <p className="text-blue-700">{user?.email}</p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-blue-800">Especialidad:</span>
+                    <p className="text-blue-700">{user?.especialidad || "No especificada"}</p>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Centro de Formación</label>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Buscar Programa de Formación *</label>
+                <div className="flex space-x-2 mb-4">
                   <Input
-                    value={formData.instructorCentro}
-                    onChange={(e) => handleInputChange("instructorCentro", e.target.value)}
-                    placeholder="Centro de Gestión Agroempresarial"
-                    disabled
+                    value={searchPrograma}
+                    onChange={(e) => setSearchPrograma(e.target.value)}
+                    placeholder="Buscar por nombre o código del programa..."
+                    className="flex-1"
                   />
+                  <Button onClick={loadProgramas} disabled={loadingProgramas}>
+                    <Search className="h-4 w-4" />
+                  </Button>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Especialidad/Área</label>
-                  <Select
-                    value={formData.instructorEspecialidad}
-                    onValueChange={(value) => handleInputChange("instructorEspecialidad", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar especialidad" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="agropecuaria">Producción Agropecuaria</SelectItem>
-                      <SelectItem value="agroindustrial">Procesamiento Agroindustrial</SelectItem>
-                      <SelectItem value="gestion">Gestión Empresarial</SelectItem>
-                      <SelectItem value="ambiental">Gestión Ambiental</SelectItem>
-                      <SelectItem value="tecnologia">Tecnologías de la Información</SelectItem>
-                      <SelectItem value="otra">Otra</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+
+                {loadingProgramas ? (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                    <p className="text-gray-600 mt-2">Cargando programas...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {programas.map((programa) => (
+                      <Card
+                        key={programa.id}
+                        className={`cursor-pointer transition-colors ${
+                          formData.programaId === programa.id
+                            ? "border-green-500 bg-green-50"
+                            : "hover:border-green-300"
+                        }`}
+                        onClick={() => handleProgramaSelect(programa.id)}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-gray-900">{programa.nombre}</h4>
+                              <p className="text-sm text-gray-600 mt-1">{programa.descripcion}</p>
+                              <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                                <span>Código: {programa.codigo}</span>
+                                <span>Duración: {programa.duracionHoras}h</span>
+                                <span>Cupo: {programa.cupoAprendices}</span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col space-y-1">
+                              <Badge variant="secondary">{programa.tipoFormacion}</Badge>
+                              <Badge variant="outline">{programa.modalidad}</Badge>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              {formData.programaSeleccionado && (
+                <Card className="bg-green-50 border-green-200">
+                  <CardContent className="p-4">
+                    <h3 className="font-semibold text-green-900 mb-2">Programa Seleccionado</h3>
+                    <div className="space-y-2 text-sm">
+                      <p>
+                        <strong>Nombre:</strong> {formData.programaSeleccionado.nombre}
+                      </p>
+                      <p>
+                        <strong>Código:</strong> {formData.programaSeleccionado.codigo}
+                      </p>
+                      <p>
+                        <strong>Duración:</strong> {formData.programaSeleccionado.duracionHoras} horas
+                      </p>
+                      <p>
+                        <strong>Modalidad:</strong> {formData.programaSeleccionado.modalidad}
+                      </p>
+                      <p>
+                        <strong>Cupo máximo:</strong> {formData.programaSeleccionado.cupoAprendices} aprendices
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
 
-          {/* Step 2: Detalles del Programa */}
-          {currentStep === 2 && (
+          {/* Step 2: Configuración de Horarios */}
+          {currentStep === 2 && formData.programaSeleccionado && (
             <div className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nombre del Programa de Formación *
-                  </label>
-                  <Input
-                    value={formData.nombreCurso}
-                    onChange={(e) => handleInputChange("nombreCurso", e.target.value)}
-                    placeholder="Ej: Excel Avanzado para Análisis de Datos"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Número de Ficha *</label>
-                  <Input
-                    value={formData.numeroFicha}
-                    onChange={(e) => handleInputChange("numeroFicha", e.target.value)}
-                    placeholder="Ej: 2024001"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-3 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Formación *</label>
-                  <Select
-                    value={formData.tipoFormacion}
-                    onValueChange={(value) => handleInputChange("tipoFormacion", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="complementaria">Formación Complementaria</SelectItem>
-                      <SelectItem value="transversal">Transversal</SelectItem>
-                      <SelectItem value="especifica">Específica</SelectItem>
-                      <SelectItem value="virtual">Virtual</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Modalidad *</label>
-                  <Select value={formData.modalidad} onValueChange={(value) => handleInputChange("modalidad", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar modalidad" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="presencial">Presencial</SelectItem>
-                      <SelectItem value="virtual">Virtual</SelectItem>
-                      <SelectItem value="mixta">Mixta (Blended)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Duración (Horas) *</label>
-                  <Input
-                    type="number"
-                    value={formData.duracionHoras}
-                    onChange={(e) => handleInputChange("duracionHoras", e.target.value)}
-                    placeholder="40"
-                    required
-                  />
-                </div>
-              </div>
-
               <div className="grid md:grid-cols-3 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Fecha de Inicio *</label>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                      <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {formData.fechaInicio
                           ? format(formData.fechaInicio, "PPP", { locale: es })
@@ -441,7 +531,7 @@ export function SolicitudForm() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Fecha de Finalización *</label>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                      <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {formData.fechaFin ? format(formData.fechaFin, "PPP", { locale: es }) : "Seleccionar fecha"}
                       </Button>
@@ -457,21 +547,180 @@ export function SolicitudForm() {
                   </Popover>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Número de Aprendices</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Número de Aprendices *</label>
                   <Input
                     type="number"
                     value={formData.numeroAprendices}
-                    onChange={(e) => handleInputChange("numeroAprendices", e.target.value)}
-                    placeholder="25"
+                    onChange={(e) => handleInputChange("numeroAprendices", Number.parseInt(e.target.value) || 0)}
+                    max={formData.programaSeleccionado.cupoAprendices}
+                    min={1}
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Máximo: {formData.programaSeleccionado.cupoAprendices} aprendices
+                  </p>
                 </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <label className="block text-sm font-medium text-gray-700">Horarios de Clase *</label>
+                  <Button onClick={addHorario} size="sm" variant="outline">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Agregar Horario
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {formData.horarios.map((horario, index) => (
+                    <Card key={index} className="p-4">
+                      <div className="grid grid-cols-4 gap-4 items-end">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Día</label>
+                          <Select
+                            value={horario.diaSemana}
+                            onValueChange={(value) => updateHorario(index, "diaSemana", value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DIAS_SEMANA.map((dia) => (
+                                <SelectItem key={dia.value} value={dia.value}>
+                                  {dia.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Hora Inicio</label>
+                          <Select
+                            value={horario.horaInicio}
+                            onValueChange={(value) => updateHorario(index, "horaInicio", value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {HORAS_DISPONIBLES.map((hora) => (
+                                <SelectItem key={hora} value={hora}>
+                                  {hora}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Hora Fin</label>
+                          <Select
+                            value={horario.horaFin}
+                            onValueChange={(value) => updateHorario(index, "horaFin", value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {HORAS_DISPONIBLES.map((hora) => (
+                                <SelectItem key={hora} value={hora}>
+                                  {hora}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Button
+                            onClick={() => removeHorario(index)}
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+
+                {formData.horarios.length > 0 && (
+                  <Card className="bg-blue-50 border-blue-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center space-x-2">
+                        <Clock className="h-5 w-5 text-blue-600" />
+                        <div>
+                          <p className="text-sm font-medium text-blue-900">
+                            Total de horas semanales: {calculateTotalHours()} horas
+                          </p>
+                          <p className="text-xs text-blue-700">
+                            Duración del programa: {formData.programaSeleccionado.duracionHoras} horas
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </div>
           )}
 
           {/* Step 3: Justificación Académica */}
-          {currentStep === 3 && (
+          {currentStep === 3 && formData.programaSeleccionado && (
             <div className="space-y-6">
+              <Card className="bg-gray-50 border-gray-200">
+                <CardContent className="p-4">
+                  <h3 className="font-semibold text-gray-900 mb-4">Objetivos y Competencias del Programa</h3>
+
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-medium text-gray-800 mb-2">Objetivos de Aprendizaje:</h4>
+                      <ul className="space-y-1">
+                        {formData.programaSeleccionado.objetivos.map((objetivo) => (
+                          <li key={objetivo.id} className="text-sm text-gray-700 flex items-start">
+                            <span className="text-green-600 mr-2">•</span>
+                            {objetivo.descripcion}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h4 className="font-medium text-gray-800 mb-2">Competencias:</h4>
+                      <ul className="space-y-1">
+                        {formData.programaSeleccionado.competencias.map((competencia) => (
+                          <li key={competencia.id} className="text-sm text-gray-700 flex items-start">
+                            <span className="text-green-600 mr-2">•</span>
+                            {competencia.descripcion}
+                            {competencia.codigo && (
+                              <Badge variant="outline" className="ml-2 text-xs">
+                                {competencia.codigo}
+                              </Badge>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h4 className="font-medium text-gray-800 mb-2">Resultados de Aprendizaje:</h4>
+                      <ul className="space-y-1">
+                        {formData.programaSeleccionado.resultados.map((resultado) => (
+                          <li key={resultado.id} className="text-sm text-gray-700 flex items-start">
+                            <span className="text-green-600 mr-2">•</span>
+                            {resultado.descripcion}
+                            {resultado.codigo && (
+                              <Badge variant="outline" className="ml-2 text-xs">
+                                {resultado.codigo}
+                              </Badge>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Justificación de la Solicitud *</label>
                 <Textarea
@@ -484,22 +733,27 @@ export function SolicitudForm() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Objetivos de Aprendizaje *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Objetivos Adicionales (Opcionales)
+                </label>
+                <p className="text-sm text-gray-600 mb-3">
+                  Agregue objetivos específicos adicionales que complementen los objetivos del programa.
+                </p>
                 <div className="space-y-3">
-                  {formData.objetivos.map((objetivo, index) => (
+                  {formData.objetivosPersonalizados.map((objetivo, index) => (
                     <div key={index} className="flex items-center space-x-2">
                       <Input
                         value={objetivo}
-                        onChange={(e) => updateArrayItem("objetivos", index, e.target.value)}
-                        placeholder={`Objetivo específico ${index + 1}`}
+                        onChange={(e) => updateArrayItem("objetivosPersonalizados", index, e.target.value)}
+                        placeholder={`Objetivo adicional ${index + 1}`}
                         className="flex-1"
                       />
-                      {formData.objetivos.length > 1 && (
+                      {formData.objetivosPersonalizados.length > 1 && (
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => removeArrayItem("objetivos", index)}
+                          onClick={() => removeArrayItem("objetivosPersonalizados", index)}
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -510,7 +764,7 @@ export function SolicitudForm() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => addArrayItem("objetivos")}
+                    onClick={() => addArrayItem("objetivosPersonalizados")}
                     className="flex items-center space-x-2"
                   >
                     <Plus className="h-4 w-4" />
@@ -520,55 +774,20 @@ export function SolicitudForm() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Competencias a Desarrollar *</label>
-                <div className="space-y-3">
-                  {formData.competencias.map((competencia, index) => (
-                    <div key={index} className="flex items-center space-x-2">
-                      <Input
-                        value={competencia}
-                        onChange={(e) => updateArrayItem("competencias", index, e.target.value)}
-                        placeholder={`Competencia específica ${index + 1}`}
-                        className="flex-1"
-                      />
-                      {formData.competencias.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => removeArrayItem("competencias", index)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => addArrayItem("competencias")}
-                    className="flex items-center space-x-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Agregar Competencia</span>
-                  </Button>
-                </div>
-              </div>
-
-              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Resultados de Aprendizaje Esperados
+                  Resultados de Aprendizaje Esperados Adicionales
                 </label>
                 <Textarea
                   value={formData.resultadosEsperados}
                   onChange={(e) => handleInputChange("resultadosEsperados", e.target.value)}
-                  placeholder="Describa los resultados específicos que espera alcanzar con los aprendices al finalizar esta formación complementaria..."
+                  placeholder="Describa resultados específicos adicionales que espera alcanzar con los aprendices al finalizar esta formación complementaria..."
                   rows={3}
                 />
               </div>
             </div>
           )}
 
+          {/* ... existing code for steps 4 and 5 ... */}
           {/* Step 4: Metodología y Recursos */}
           {currentStep === 4 && (
             <div className="space-y-6">
@@ -671,48 +890,48 @@ export function SolicitudForm() {
               </div>
 
               {/* Resumen de la Solicitud */}
-              <div className="p-6 bg-gray-50 rounded-lg border">
-                <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                  <FileText className="h-5 w-5 mr-2" />
-                  Resumen de la Solicitud
-                </h3>
-                <div className="grid md:grid-cols-2 gap-6 text-sm">
-                  <div className="space-y-3">
-                    <div>
-                      <span className="font-medium text-gray-700">Instructor:</span>
-                      <p className="text-gray-600">{formData.instructorNombre || "No especificado"}</p>
+              {formData.programaSeleccionado && (
+                <div className="p-6 bg-gray-50 rounded-lg border">
+                  <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
+                    <FileText className="h-5 w-5 mr-2" />
+                    Resumen de la Solicitud
+                  </h3>
+                  <div className="grid md:grid-cols-2 gap-6 text-sm">
+                    <div className="space-y-3">
+                      <div>
+                        <span className="font-medium text-gray-700">Instructor:</span>
+                        <p className="text-gray-600">{user?.name}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Programa:</span>
+                        <p className="text-gray-600">{formData.programaSeleccionado.nombre}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Código:</span>
+                        <p className="text-gray-600">{formData.programaSeleccionado.codigo}</p>
+                      </div>
                     </div>
-                    <div>
-                      <span className="font-medium text-gray-700">Programa:</span>
-                      <p className="text-gray-600">{formData.nombreCurso || "No especificado"}</p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-gray-700">Ficha:</span>
-                      <p className="text-gray-600">{formData.numeroFicha || "No especificado"}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <span className="font-medium text-gray-700">Duración:</span>
-                      <p className="text-gray-600">
-                        {formData.duracionHoras ? `${formData.duracionHoras} horas` : "No especificado"}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-gray-700">Modalidad:</span>
-                      <p className="text-gray-600">{formData.modalidad || "No especificado"}</p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-gray-700">Tipo:</span>
-                      <p className="text-gray-600">{formData.tipoFormacion || "No especificado"}</p>
+                    <div className="space-y-3">
+                      <div>
+                        <span className="font-medium text-gray-700">Duración:</span>
+                        <p className="text-gray-600">{formData.programaSeleccionado.duracionHoras} horas</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Modalidad:</span>
+                        <p className="text-gray-600">{formData.programaSeleccionado.modalidad}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Aprendices:</span>
+                        <p className="text-gray-600">{formData.numeroAprendices}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Información de Proceso */}
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <h4 className="font-medium text-blue-900 mb-2">📋 Proceso de Revisión</h4>
+                <h4 className="font-medium text-blue-900 mb-2">Proceso de Revisión</h4>
                 <div className="text-sm text-blue-800 space-y-1">
                   <p>• Su solicitud será enviada al coordinador de su centro para revisión inicial</p>
                   <p>• El coordinador evaluará la pertinencia y viabilidad del programa solicitado</p>

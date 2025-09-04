@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { Navigation } from "@/components/navigation"
 import { Hero } from "@/components/hero"
 import { Features } from "@/components/features"
@@ -8,19 +7,10 @@ import { Footer } from "@/components/footer"
 import { AdminDashboard } from "@/components/admin-dashboard"
 import { InstructorDashboard } from "@/components/instructor-dashboard"
 import { SolicitudesPendientes } from "@/components/solicitudes-pendientes"
+import { useAuth } from "@/lib/auth-context"
 
 export default function HomePage() {
-  const [user, setUser] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    // Check if user is logged in
-    const userData = localStorage.getItem("sena_user")
-    if (userData) {
-      setUser(JSON.parse(userData))
-    }
-    setIsLoading(false)
-  }, [])
+  const { user, isLoading } = useAuth()
 
   if (isLoading) {
     return (
@@ -51,7 +41,7 @@ export default function HomePage() {
       <Navigation />
       <div className="py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {user.role === "admin" && (
+          {user.role === "ADMIN" && (
             <>
               <div className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-900">Dashboard Administrativo</h1>
@@ -63,7 +53,7 @@ export default function HomePage() {
             </>
           )}
 
-          {user.role === "coordinador" && (
+          {user.role === "COORDINADOR" && (
             <>
               <div className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-900">Panel de Coordinación</h1>
@@ -75,7 +65,7 @@ export default function HomePage() {
             </>
           )}
 
-          {user.role === "instructor" && <InstructorDashboard />}
+          {user.role === "INSTRUCTOR" && <InstructorDashboard />}
         </div>
       </div>
       <Footer />

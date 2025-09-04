@@ -1,0 +1,203 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" 
+  url      = env("DATABASE_URL")  
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  cedula    String   @unique
+  telefono  String?
+  role      Role     @default(INSTRUCTOR)
+  centroId  String
+  centro    Centro   @relation(fields: [centroId], references: [id])
+  especialidad String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relaciones
+  solicitudes Solicitud[]
+  
+  @@map("users")
+}
+
+model Centro {
+  id        String   @id @default(cuid())
+  nombre    String
+  codigo    String   @unique
+  direccion String?
+  telefono  String?
+  ciudad    String
+  region    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relaciones
+  usuarios  User[]
+  programas Programa[]
+  
+  @@map("centros")
+}
+
+model Programa {
+  id              String   @id @default(cuid())
+  codigo          String   @unique
+  nombre          String
+  tipoFormacion   TipoFormacion
+  modalidad       Modalidad
+  duracionHoras   Int
+  cupoAprendices  Int
+  descripcion     String?
+  centroId        String
+  centro          Centro   @relation(fields: [centroId], references: [id])
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  objetivos       ObjetivoAprendizaje[]
+  competencias    Competencia[]
+  resultados      ResultadoAprendizaje[]
+  solicitudes     Solicitud[]
+  
+  @@map("programas")
+}
+
+model ObjetivoAprendizaje {
+  id          String   @id @default(cuid())
+  descripcion String
+  programaId  String
+  programa    Programa @relation(fields: [programaId], references: [id])
+  orden       Int      @default(1)
+  
+  @@map("objetivos_aprendizaje")
+}
+
+model Competencia {
+  id          String   @id @default(cuid())
+  descripcion String
+  codigo      String?
+  programaId  String
+  programa    Programa @relation(fields: [programaId], references: [id])
+  
+  @@map("competencias")
+}
+
+model ResultadoAprendizaje {
+  id          String   @id @default(cuid())
+  descripcion String
+  codigo      String?
+  programaId  String
+  programa    Programa @relation(fields: [programaId], references: [id])
+  
+  @@map("resultados_aprendizaje")
+}
+
+model Solicitud {
+  id                    String   @id @default(cuid())
+  codigo                String   @unique // SOL-2024-001
+  instructorId          String
+  instructor            User     @relation(fields: [instructorId], references: [id])
+  programaId            String
+  programa              Programa @relation(fields: [programaId], references: [id])
+  
+  // Información del programa solicitado
+  fechaInicio           DateTime
+  fechaFin              DateTime
+  numeroAprendices      Int
+  
+  // Horarios seleccionados por el instructor
+  horarios              HorarioSolicitud[]
+  
+  // Justificación académica
+  justificacion         String
+  objetivosPersonalizados String[] // Objetivos adicionales del instructor
+  resultadosEsperados   String?
+  
+  // Metodología y recursos
+  metodologia           String
+  recursosNecesarios    String?
+  criteriosEvaluacion   String
+  observaciones         String?
+  
+  // Validaciones
+  cumpleRequisitos      Boolean  @default(false)
+  autorizaUsoInfo       Boolean  @default(false)
+  confirmaVeracidad     Boolean  @default(false)
+  
+  // Estado y seguimiento
+  estado                EstadoSolicitud @default(BORRADOR)
+  fechaSolicitud        DateTime @default(now())
+  fechaRevision         DateTime?
+  fechaAprobacion       DateTime?
+  comentariosRevision   String?
+  
+  // Ficha generada (después de aprobación)
+  numeroFicha           String?  @unique
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@map("solicitudes")
+}
+
+model HorarioSolicitud {
+  id          String    @id @default(cuid())
+  solicitudId String
+  solicitud   Solicitud @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  diaSemana   DiaSemana
+  horaInicio  String    // "08:00"
+  horaFin     String    // "12:00"
+  
+  @@map("horarios_solicitud")
+}
+
+// Enums
+enum Role {
+  INSTRUCTOR
+  COORDINADOR
+  ADMIN
+}
+
+enum TipoFormacion {
+  COMPLEMENTARIA
+  TRANSVERSAL
+  ESPECIFICA
+  VIRTUAL
+}
+
+enum Modalidad {
+  PRESENCIAL
+  VIRTUAL
+  MIXTA
+}
+
+enum EstadoSolicitud {
+  BORRADOR
+  PENDIENTE
+  EN_REVISION
+  APROBADA
+  RECHAZADA
+  CANCELADA
+}
+
+enum DiaSemana {
+  LUNES
+  MARTES
+  MIERCOLES
+  JUEVES
+  VIERNES
+  SABADO
+  DOMINGO
+}

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2, Shield, Info } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
 
 interface LoginData {
   email: string
@@ -17,33 +18,9 @@ interface LoginData {
   rememberMe: boolean
 }
 
-// Usuarios simulados para demostración
-const DEMO_USERS = [
-  {
-    email: "maria.gonzalez@sena.edu.co",
-    password: "instructor123",
-    name: "María González",
-    role: "instructor",
-    center: "Centro de Gestión Agroempresarial del Oriente",
-  },
-  {
-    email: "carlos.rodriguez@sena.edu.co",
-    password: "coordinador123",
-    name: "Carlos Rodríguez",
-    role: "coordinador",
-    center: "Centro de Gestión Agroempresarial del Oriente",
-  },
-  {
-    email: "admin@sena.edu.co",
-    password: "admin123",
-    name: "Administrador",
-    role: "admin",
-    center: "Administración Central",
-  },
-]
-
 export function LoginForm() {
   const router = useRouter()
+  const { login, isLoading: authLoading } = useAuth()
   const [formData, setFormData] = useState<LoginData>({
     email: "",
     password: "",
@@ -64,33 +41,13 @@ export function LoginForm() {
     setError("")
 
     try {
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      const result = await login(formData.email, formData.password, formData.rememberMe)
 
-      // Check demo credentials
-      const user = DEMO_USERS.find((u) => u.email === formData.email && u.password === formData.password)
-
-      if (user) {
-        // Simulate successful login
-        localStorage.setItem(
-          "sena_user",
-          JSON.stringify({
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            center: user.center,
-            loginTime: new Date().toISOString(),
-          }),
-        )
-
-        if (formData.rememberMe) {
-          localStorage.setItem("sena_remember", "true")
-        }
-
+      if (result.success) {
         // Redirect to dashboard
         router.push("/")
       } else {
-        setError("Credenciales incorrectas. Verifica tu correo electrónico y contraseña.")
+        setError(result.error || "Credenciales incorrectas. Verifica tu correo electrónico y contraseña.")
       }
     } catch (err) {
       setError("Error de conexión. Por favor, intenta nuevamente.")
@@ -100,14 +57,18 @@ export function LoginForm() {
   }
 
   const fillDemoCredentials = (userType: "instructor" | "coordinador" | "admin") => {
-    const user = DEMO_USERS.find((u) => u.role === userType)
-    if (user) {
-      setFormData((prev) => ({
-        ...prev,
-        email: user.email,
-        password: user.password,
-      }))
+    const credentials = {
+      instructor: { email: "maria.gonzalez@sena.edu.co", password: "sena123" },
+      coordinador: { email: "luis.herrera@sena.edu.co", password: "sena123" },
+      admin: { email: "admin@sena.edu.co", password: "sena123" },
     }
+
+    const cred = credentials[userType]
+    setFormData((prev) => ({
+      ...prev,
+      email: cred.email,
+      password: cred.password,
+    }))
   }
 
   return (
@@ -126,7 +87,7 @@ export function LoginForm() {
                   className="text-left text-xs text-blue-700 hover:text-blue-900 bg-white/50 hover:bg-white/80 p-2 rounded transition-colors"
                 >
                   <div className="font-medium">👨‍🏫 Instructor</div>
-                  <div className="text-blue-600">maria.gonzalez@sena.edu.co / instructor123</div>
+                  <div className="text-blue-600">maria.gonzalez@sena.edu.co / sena123</div>
                 </button>
                 <button
                   type="button"
@@ -134,7 +95,7 @@ export function LoginForm() {
                   className="text-left text-xs text-blue-700 hover:text-blue-900 bg-white/50 hover:bg-white/80 p-2 rounded transition-colors"
                 >
                   <div className="font-medium">👨‍💼 Coordinador</div>
-                  <div className="text-blue-600">carlos.rodriguez@sena.edu.co / coordinador123</div>
+                  <div className="text-blue-600">luis.herrera@sena.edu.co / sena123</div>
                 </button>
                 <button
                   type="button"
@@ -142,7 +103,7 @@ export function LoginForm() {
                   className="text-left text-xs text-blue-700 hover:text-blue-900 bg-white/50 hover:bg-white/80 p-2 rounded transition-colors"
                 >
                   <div className="font-medium">⚙️ Administrador</div>
-                  <div className="text-blue-600">admin@sena.edu.co / admin123</div>
+                  <div className="text-blue-600">admin@sena.edu.co / sena123</div>
                 </button>
               </div>
             </div>
@@ -191,7 +152,7 @@ export function LoginForm() {
               placeholder="tu.nombre@sena.edu.co"
               className="pl-10 h-12"
               required
-              disabled={isLoading}
+              disabled={isLoading || authLoading}
             />
           </div>
         </div>
@@ -213,13 +174,13 @@ export function LoginForm() {
               placeholder="Ingresa tu contraseña"
               className="pl-10 pr-10 h-12"
               required
-              disabled={isLoading}
+              disabled={isLoading || authLoading}
             />
             <button
               type="button"
               className="absolute inset-y-0 right-0 pr-3 flex items-center"
               onClick={() => setShowPassword(!showPassword)}
-              disabled={isLoading}
+              disabled={isLoading || authLoading}
             >
               {showPassword ? (
                 <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
@@ -237,7 +198,7 @@ export function LoginForm() {
               id="remember"
               checked={formData.rememberMe}
               onCheckedChange={(checked) => handleInputChange("rememberMe", checked as boolean)}
-              disabled={isLoading}
+              disabled={isLoading || authLoading}
             />
             <label htmlFor="remember" className="text-sm text-gray-600 cursor-pointer">
               Recordar sesión
@@ -246,7 +207,7 @@ export function LoginForm() {
           <button
             type="button"
             className="text-sm text-green-600 hover:text-green-500 transition-colors"
-            disabled={isLoading}
+            disabled={isLoading || authLoading}
           >
             ¿Olvidaste tu contraseña?
           </button>
@@ -256,9 +217,9 @@ export function LoginForm() {
         <Button
           type="submit"
           className="w-full bg-green-600 hover:bg-green-700 text-white h-12 text-base font-semibold"
-          disabled={isLoading}
+          disabled={isLoading || authLoading}
         >
-          {isLoading ? (
+          {isLoading || authLoading ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               Iniciando sesión...

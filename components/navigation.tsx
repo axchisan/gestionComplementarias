@@ -1,37 +1,25 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Menu, X, User, FileText, BarChart3, Home, LogOut, Users, Settings, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/lib/auth-context"
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false)
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [user, setUser] = useState<any>(null)
-
-  useEffect(() => {
-    // Check if user is logged in
-    const userData = localStorage.getItem("sena_user")
-    if (userData) {
-      setUser(JSON.parse(userData))
-      setIsLoggedIn(true)
-    }
-  }, [])
+  const { user, isAuthenticated, logout } = useAuth()
 
   const handleLogout = () => {
-    localStorage.removeItem("sena_user")
-    localStorage.removeItem("sena_remember")
-    setIsLoggedIn(false)
-    setUser(null)
-    window.location.href = "/login"
+    logout()
+    setIsOpen(false)
   }
 
   const getNavItemsByRole = (role: string) => {
     const baseItems = [{ href: "/", label: "Inicio", icon: Home }]
 
-    if (role === "instructor") {
+    if (role === "INSTRUCTOR") {
       return [
         ...baseItems,
         { href: "/mis-solicitudes", label: "Mis Solicitudes", icon: FileText },
@@ -40,7 +28,7 @@ export function Navigation() {
       ]
     }
 
-    if (role === "coordinador") {
+    if (role === "COORDINADOR") {
       return [
         ...baseItems,
         { href: "/solicitudes-pendientes", label: "Solicitudes Pendientes", icon: CheckCircle },
@@ -50,7 +38,7 @@ export function Navigation() {
       ]
     }
 
-    if (role === "admin") {
+    if (role === "ADMIN") {
       return [
         ...baseItems,
         { href: "/dashboard-admin", label: "Dashboard", icon: BarChart3 },
@@ -67,11 +55,11 @@ export function Navigation() {
 
   const getRoleLabel = (role: string) => {
     switch (role) {
-      case "instructor":
+      case "INSTRUCTOR":
         return "Instructor"
-      case "coordinador":
+      case "COORDINADOR":
         return "Coordinador"
-      case "admin":
+      case "ADMIN":
         return "Administrador"
       default:
         return "Usuario"
@@ -93,7 +81,7 @@ export function Navigation() {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-6">
-            {isLoggedIn &&
+            {isAuthenticated &&
               navItems.map((item) => {
                 const Icon = item.icon
                 return (
@@ -108,19 +96,19 @@ export function Navigation() {
                 )
               })}
 
-            {isLoggedIn ? (
+            {isAuthenticated ? (
               <div className="flex items-center space-x-3">
                 <div className="flex items-center space-x-2 text-gray-700 bg-gray-50 px-3 py-2 rounded-lg">
                   <User className="h-4 w-4" />
                   <div className="text-sm">
                     <div className="font-medium">{user?.name || "Usuario"}</div>
-                    <div className="text-xs text-gray-500">{getRoleLabel(user?.role)}</div>
+                    <div className="text-xs text-gray-500">{getRoleLabel(user?.role || "")}</div>
                   </div>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-red-600 border-red-600 hover:bg-red-50"
+                  className="text-red-600 border-red-600 hover:bg-red-50 bg-transparent"
                   onClick={handleLogout}
                 >
                   <LogOut className="h-4 w-4 mr-1" />
@@ -146,7 +134,7 @@ export function Navigation() {
         {isOpen && (
           <div className="md:hidden bg-white border-t border-gray-200">
             <div className="px-2 pt-2 pb-3 space-y-1">
-              {isLoggedIn &&
+              {isAuthenticated &&
                 navItems.map((item) => {
                   const Icon = item.icon
                   return (
@@ -162,16 +150,16 @@ export function Navigation() {
                   )
                 })}
               <div className="border-t border-gray-200 pt-2 mt-2">
-                {isLoggedIn ? (
+                {isAuthenticated ? (
                   <div className="px-3 py-2">
                     <div className="text-sm text-gray-600 mb-2">
                       <div className="font-medium">{user?.name || "Usuario"}</div>
-                      <div className="text-xs text-gray-500">{getRoleLabel(user?.role)}</div>
+                      <div className="text-xs text-gray-500">{getRoleLabel(user?.role || "")}</div>
                     </div>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="mt-2 text-red-600 border-red-600"
+                      className="mt-2 text-red-600 border-red-600 bg-transparent"
                       onClick={handleLogout}
                     >
                       <LogOut className="h-4 w-4 mr-1" />

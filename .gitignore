@@ -115,3 +115,5 @@ frontend/public/workbox-*.js
 
 # Docker
 docker-compose.override.yml
+
+/lib/generated/prisma

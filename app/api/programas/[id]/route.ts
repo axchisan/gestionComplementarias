@@ -5,12 +5,13 @@ import { prisma } from "@/lib/prisma"
 export const GET = withAuth(async (req: NextRequest, user, context) => {
   try {
     const { params } = context || {}
-    if (!params?.id) {
+    const resolvedParams = await params
+    if (!resolvedParams?.id) {
       return NextResponse.json({ error: "ID de programa requerido" }, { status: 400 })
     }
 
     const programa = await prisma.programa.findUnique({
-      where: { id: params.id },
+      where: { id: resolvedParams.id },
       include: {
         centro: {
           select: { nombre: true, codigo: true, ciudad: true },

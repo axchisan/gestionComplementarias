@@ -89,7 +89,8 @@ export function HistorialSolicitudes() {
     const matchesEstado = selectedEstado === "todas" || solicitud.estado === selectedEstado
     const matchesTipo = selectedTipo === "todos" || (solicitud.tipoFormacion?.toLowerCase() || "") === selectedTipo
 
-    const year = new Date(solicitud.fechaSolicitud).getFullYear().toString()
+    const solicitudDate = solicitud.fechaSolicitud ? new Date(solicitud.fechaSolicitud) : new Date()
+    const year = solicitudDate.getFullYear().toString()
     const matchesYear = selectedYear === "todos" || year === selectedYear
 
     return matchesSearch && matchesEstado && matchesTipo && matchesYear

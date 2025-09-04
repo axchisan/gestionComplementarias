@@ -112,23 +112,64 @@ model Solicitud {
   programaId            String
   programa              Programa @relation(fields: [programaId], references: [id])
   
-  // Información del programa solicitado
+  fechaCaracterizacion  DateTime?
+  responsableNombre     String   // Nombre del responsable de caracterización
+  responsableCedula     String   // C.C. del responsable
+  responsableEmail      String   // Email del responsable
+  
+  codigoPrograma        String   // Código del programa
+  versionPrograma       String   @default("1") // Versión del programa
+  duracionMaxima        Int      // Duración máxima en horas
+  cupoMaximo            Int      // Cupo máximo de la ficha
+  numeroAprendicesInscribir Int  // Número de aprendices a inscribir
+  
+  municipio             String
+  departamento          String
+  nombreEmpresa         String   // Nombre de la empresa/entidad
+  nitEmpresa            String?  // NIT de la empresa
+  codigoEmpresa         String?  // Código de empresa
+  representanteLegal    String   // Representante legal
+  fechaCreacionEmpresa  DateTime? // Fecha de creación de la empresa
+  direccionEmpresa      String   // Dirección de la empresa
+  telefonosEmpresa      String?  // Teléfonos de la empresa
+  
+  lugarFormacion        String   // Lugar específico (ej: escuela santa fe-Barbosa)
+  tipoAmbiente          String   // Tipo de ambiente (ej: AULA MOVIL)
+  
+  programaEmprendimiento Boolean @default(false)
+  programaBilinguismo   Boolean @default(false)
+  atencionInstituciones Boolean @default(false)
+  posconflicto          Boolean @default(false)
+  senaEmprendeRural     Boolean @default(false)
+  formacionEspecialMypimes Boolean @default(false)
+  senaEmprendeRuralPosconflicto Boolean @default(false)
+  tecnoacademiaSennova  Boolean @default(false)
+  campesenaConvenio8842 Boolean @default(false)
+  fullPopularConvenio8882 Boolean @default(false)
+  icbfInstituto         Boolean @default(false)
+  policiaNacional       Boolean @default(false)
+  otroEspecificar       String? // Campo para "Otro (especifique cuál)"
+  
+  inicioInscripcion     DateTime // Inicio de inscripción
+  finalizacionInscripcion DateTime // Finalización de inscripción
+  fechaInicioCurso      DateTime // Fecha de inicio del curso
+  fechaFinalizacionCurso DateTime // Fecha de finalización del curso
+  
+  // Información del programa solicitado (campos existentes actualizados)
   fechaInicio           DateTime
   fechaFin              DateTime
   numeroAprendices      Int
   
-  // Horarios seleccionados por el instructor
-  horarios              HorarioSolicitud[]
+  horarios              HorarioDetallado[]
   
   // Justificación académica
   justificacion         String
   objetivosPersonalizados String[] // Objetivos adicionales del instructor
   resultadosEsperados   String?
   
-  // Metodología y recursos
-  metodologia           String
-  recursosNecesarios    String?
-  criteriosEvaluacion   String
+  // metodologia           String - REMOVED as per user request
+  // recursosNecesarios    String? - REMOVED as per user request  
+  // criteriosEvaluacion   String - REMOVED as per user request
   observaciones         String?
   
   // Validaciones
@@ -143,6 +184,11 @@ model Solicitud {
   fechaAprobacion       DateTime?
   comentariosRevision   String?
   
+  firmaInstructorResponsable String? // Firma del instructor responsable
+  firmaCoordinadorAcademico String?  // Firma del coordinador académico
+  versionDocumento      String @default("1") // Versión del documento
+  codigoFormato         String @default("F11-3030-003/03-06") // Código de formato
+  
   // Ficha generada (después de aprobación)
   numeroFicha           String?  @unique
   
@@ -152,15 +198,20 @@ model Solicitud {
   @@map("solicitudes")
 }
 
-model HorarioSolicitud {
+model HorarioDetallado {
   id          String    @id @default(cuid())
   solicitudId String
   solicitud   Solicitud @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
-  diaSemana   DiaSemana
-  horaInicio  String    // "08:00"
-  horaFin     String    // "12:00"
   
-  @@map("horarios_solicitud")
+  diaSemana   DiaSemana
+  fecha       DateTime  // Fecha específica (ej: 17 DE JUNIO)
+  horaInicio  String    // "08:00"
+  horaFin     String    // "16:00"
+  
+  esFlexible  Boolean   @default(true) // Permite cambios por inconvenientes
+  observaciones String? // Observaciones específicas del horario
+  
+  @@map("horarios_detallados")
 }
 
 // Enums
@@ -181,6 +232,8 @@ enum Modalidad {
   PRESENCIAL
   VIRTUAL
   MIXTA
+  DESESCOLARIZADA // Added from Excel format
+  COMBINADA       // Added from Excel format
 }
 
 enum EstadoSolicitud {

@@ -21,7 +21,12 @@ export const GET = withAuth(async (req: NextRequest, user) => {
     }
 
     if (estado) {
-      where.estado = estado
+      if (estado.includes(",")) {
+        const estados = estado.split(",").map((e) => e.trim().toUpperCase())
+        where.estado = { in: estados }
+      } else {
+        where.estado = estado.toUpperCase()
+      }
     }
 
     const [solicitudes, total] = await Promise.all([

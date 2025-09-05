@@ -2,10 +2,21 @@ import { type NextRequest, NextResponse } from "next/server"
 import { withAuth } from "@/lib/middleware"
 import { prisma } from "@/lib/prisma"
 
-export const GET = withAuth(async (req: NextRequest, user, { params }: { params: { id: string } }) => {
+export const GET = withAuth(async (req: NextRequest, user, context) => {
   try {
+    const { params } = context || {}
+    if (!params) {
+      return NextResponse.json({ error: "Parámetros no disponibles" }, { status: 400 })
+    }
+
+    // Await params before accessing properties (Next.js 15 requirement)
+    const resolvedParams = await params
+    if (!resolvedParams?.id) {
+      return NextResponse.json({ error: "ID de solicitud requerido" }, { status: 400 })
+    }
+
     const solicitud = await prisma.solicitud.findUnique({
-      where: { id: params.id },
+      where: { id: resolvedParams.id },
       include: {
         instructor: {
           select: {
@@ -51,13 +62,24 @@ export const GET = withAuth(async (req: NextRequest, user, { params }: { params:
   }
 })
 
-export const PUT = withAuth(async (req: NextRequest, user, { params }: { params: { id: string } }) => {
+export const PUT = withAuth(async (req: NextRequest, user, context) => {
   try {
+    const { params } = context || {}
+    if (!params) {
+      return NextResponse.json({ error: "Parámetros no disponibles" }, { status: 400 })
+    }
+
+    // Await params before accessing properties (Next.js 15 requirement)
+    const resolvedParams = await params
+    if (!resolvedParams?.id) {
+      return NextResponse.json({ error: "ID de solicitud requerido" }, { status: 400 })
+    }
+
     const data = await req.json()
 
     // Verificar que la solicitud existe y pertenece al usuario
     const existingSolicitud = await prisma.solicitud.findUnique({
-      where: { id: params.id },
+      where: { id: resolvedParams.id },
       include: { programa: true },
     })
 
@@ -77,18 +99,65 @@ export const PUT = withAuth(async (req: NextRequest, user, { params }: { params:
 
     // Actualizar solicitud
     const solicitud = await prisma.solicitud.update({
-      where: { id: params.id },
+      where: { id: resolvedParams.id },
       data: {
-        fechaInicio: data.fechaInicio ? new Date(data.fechaInicio) : undefined,
-        fechaFin: data.fechaFin ? new Date(data.fechaFin) : undefined,
-        numeroAprendices: data.numeroAprendices,
+        // Información general
+        fechaCaracterizacion: data.fechaCaracterizacion ? new Date(data.fechaCaracterizacion) : undefined,
+        responsableNombre: data.responsableNombre,
+        responsableCedula: data.responsableCedula,
+        responsableEmail: data.responsableEmail,
+
+        // Datos del programa
+        codigoPrograma: data.codigoPrograma,
+        versionPrograma: data.versionPrograma,
+        duracionMaxima: data.duracionMaxima,
+        cupoMaximo: data.cupoMaximo,
+        numeroAprendicesInscribir: data.numeroAprendicesInscribir,
+        modalidad: data.modalidad,
+
+        // Datos de empresa y ubicación
+        municipio: data.municipio,
+        departamento: data.departamento,
+        nombreEmpresa: data.nombreEmpresa,
+        nitEmpresa: data.nitEmpresa,
+        codigoEmpresa: data.codigoEmpresa,
+        representanteLegal: data.representanteLegal,
+        fechaCreacionEmpresa: data.fechaCreacionEmpresa ? new Date(data.fechaCreacionEmpresa) : undefined,
+        direccionEmpresa: data.direccionEmpresa,
+        telefonosEmpresa: data.telefonosEmpresa,
+
+        // Ambiente de formación
+        lugarFormacion: data.lugarFormacion,
+        tipoAmbiente: data.tipoAmbiente,
+
+        // Caracterización de programas especiales
+        programaEmprendimiento: data.programaEmprendimiento,
+        programaBilinguismo: data.programaBilinguismo,
+        atencionInstituciones: data.atencionInstituciones,
+        posconflicto: data.posconflicto,
+        senaEmprendeRural: data.senaEmprendeRural,
+        formacionEspecialMypimes: data.formacionEspecialMypimes,
+        senaEmprendeRuralPosconflicto: data.senaEmprendeRuralPosconflicto,
+        tecnoacademiaSennova: data.tecnoacademiaSennova,
+        campesenaConvenio8842: data.campesenaConvenio8842,
+        fullPopularConvenio8882: data.fullPopularConvenio8882,
+        icbfInstituto: data.icbfInstituto,
+        policiaNacional: data.policiaNacional,
+        otroEspecificar: data.otroEspecificar,
+
+        // Fechas de programación
+        inicioInscripcion: data.inicioInscripcion ? new Date(data.inicioInscripcion) : undefined,
+        finalizacionInscripcion: data.finalizacionInscripcion ? new Date(data.finalizacionInscripcion) : undefined,
+        fechaInicioCurso: data.fechaInicioCurso ? new Date(data.fechaInicioCurso) : undefined,
+        fechaFinalizacionCurso: data.fechaFinalizacionCurso ? new Date(data.fechaFinalizacionCurso) : undefined,
+
+        // Justificación académica
         justificacion: data.justificacion,
         objetivosPersonalizados: data.objetivosPersonalizados,
         resultadosEsperados: data.resultadosEsperados,
-        metodologia: data.metodologia,
-        recursosNecesarios: data.recursosNecesarios,
-        criteriosEvaluacion: data.criteriosEvaluacion,
         observaciones: data.observaciones,
+
+        // Validaciones
         cumpleRequisitos: data.cumpleRequisitos,
         autorizaUsoInfo: data.autorizaUsoInfo,
         confirmaVeracidad: data.confirmaVeracidad,
@@ -102,16 +171,19 @@ export const PUT = withAuth(async (req: NextRequest, user, { params }: { params:
 
     // Actualizar horarios si se proporcionan
     if (data.horarios) {
-      await prisma.horarioSolicitud.deleteMany({
-        where: { solicitudId: params.id },
+      await prisma.horarioDetallado.deleteMany({
+        where: { solicitudId: resolvedParams.id },
       })
 
-      await prisma.horarioSolicitud.createMany({
+      await prisma.horarioDetallado.createMany({
         data: data.horarios.map((horario: any) => ({
-          solicitudId: params.id,
+          solicitudId: resolvedParams.id,
           diaSemana: horario.diaSemana,
+          fecha: horario.fecha ? new Date(horario.fecha) : null,
           horaInicio: horario.horaInicio,
           horaFin: horario.horaFin,
+          esFlexible: horario.esFlexible !== undefined ? horario.esFlexible : true,
+          observaciones: horario.observaciones,
         })),
       })
     }

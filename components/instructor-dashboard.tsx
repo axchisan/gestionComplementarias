@@ -375,11 +375,19 @@ const InstructorDashboard = () => {
                             Solicitado el {new Date(solicitud.fechaSolicitud).toLocaleDateString("es-CO")}
                           </span>
                           <div className="flex items-center space-x-2">
-                            <Button variant="outline" size="sm">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => (window.location.href = `/solicitudes/${solicitud.id}`)}
+                            >
                               Ver Detalles
                             </Button>
                             {(solicitud.estado === "PENDIENTE" || solicitud.estado === "BORRADOR") && (
-                              <Button variant="outline" size="sm">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => (window.location.href = `/editar-solicitud/${solicitud.id}`)}
+                              >
                                 Editar
                               </Button>
                             )}

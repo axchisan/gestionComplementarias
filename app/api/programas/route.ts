@@ -9,10 +9,11 @@ export const GET = withAuth(async (req: NextRequest, user) => {
     const tipoFormacion = searchParams.get("tipoFormacion")
     const modalidad = searchParams.get("modalidad")
     const page = Number.parseInt(searchParams.get("page") || "1")
-    const limit = Number.parseInt(searchParams.get("limit") || "10")
+    const limit = Number.parseInt(searchParams.get("limit") || "20") // Increased default limit for better UX
 
     const where: any = {
       isActive: true,
+      tipoFormacion: "COMPLEMENTARIA",
       // Filtrar por centro del usuario si es instructor
       ...(user.role === "INSTRUCTOR" && { centroId: user.centroId }),
     }
@@ -23,10 +24,6 @@ export const GET = withAuth(async (req: NextRequest, user) => {
         { codigo: { contains: search, mode: "insensitive" } },
         { descripcion: { contains: search, mode: "insensitive" } },
       ]
-    }
-
-    if (tipoFormacion) {
-      where.tipoFormacion = tipoFormacion
     }
 
     if (modalidad) {
@@ -49,7 +46,7 @@ export const GET = withAuth(async (req: NextRequest, user) => {
             select: { solicitudes: true },
           },
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ solicitudes: { _count: "desc" } }, { nombre: "asc" }],
         skip: (page - 1) * limit,
         take: limit,
       }),

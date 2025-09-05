@@ -122,6 +122,7 @@ model Solicitud {
   duracionMaxima        Int      // Duración máxima en horas
   cupoMaximo            Int      // Cupo máximo de la ficha
   numeroAprendicesInscribir Int  // Número de aprendices a inscribir
+  modalidad             Modalidad // Added modalidad field to match form data
   
   municipio             String
   departamento          String
@@ -155,21 +156,12 @@ model Solicitud {
   fechaInicioCurso      DateTime // Fecha de inicio del curso
   fechaFinalizacionCurso DateTime // Fecha de finalización del curso
   
-  // Información del programa solicitado (campos existentes actualizados)
-  fechaInicio           DateTime
-  fechaFin              DateTime
-  numeroAprendices      Int
-  
   horarios              HorarioDetallado[]
   
   // Justificación académica
   justificacion         String
   objetivosPersonalizados String[] // Objetivos adicionales del instructor
   resultadosEsperados   String?
-  
-  // metodologia           String - REMOVED as per user request
-  // recursosNecesarios    String? - REMOVED as per user request  
-  // criteriosEvaluacion   String - REMOVED as per user request
   observaciones         String?
   
   // Validaciones
@@ -204,7 +196,7 @@ model HorarioDetallado {
   solicitud   Solicitud @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
   
   diaSemana   DiaSemana
-  fecha       DateTime  // Fecha específica (ej: 17 DE JUNIO)
+  fecha       DateTime? // Made fecha optional since it can be flexible
   horaInicio  String    // "08:00"
   horaFin     String    // "16:00"
   

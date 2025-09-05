@@ -113,26 +113,78 @@ export const POST = withAuth(async (req: NextRequest, user) => {
         codigo,
         instructorId: user.userId,
         programaId: data.programaId,
-        fechaInicio: new Date(data.fechaInicio),
-        fechaFin: new Date(data.fechaFin),
-        numeroAprendices: data.numeroAprendices,
+
+        // Información general
+        fechaCaracterizacion: data.fechaCaracterizacion ? new Date(data.fechaCaracterizacion) : new Date(),
+        responsableNombre: data.responsableNombre,
+        responsableCedula: data.responsableCedula,
+        responsableEmail: data.responsableEmail,
+
+        // Datos del programa
+        codigoPrograma: data.codigoPrograma,
+        versionPrograma: data.versionPrograma || "1",
+        duracionMaxima: data.duracionMaxima,
+        cupoMaximo: data.cupoMaximo,
+        numeroAprendicesInscribir: data.numeroAprendicesInscribir,
+        modalidad: data.modalidad,
+
+        // Datos de empresa y ubicación
+        municipio: data.municipio,
+        departamento: data.departamento,
+        nombreEmpresa: data.nombreEmpresa,
+        nitEmpresa: data.nitEmpresa,
+        codigoEmpresa: data.codigoEmpresa,
+        representanteLegal: data.representanteLegal,
+        fechaCreacionEmpresa: data.fechaCreacionEmpresa ? new Date(data.fechaCreacionEmpresa) : null,
+        direccionEmpresa: data.direccionEmpresa,
+        telefonosEmpresa: data.telefonosEmpresa,
+
+        // Ambiente de formación
+        lugarFormacion: data.lugarFormacion,
+        tipoAmbiente: data.tipoAmbiente,
+
+        // Caracterización de programas especiales
+        programaEmprendimiento: data.programaEmprendimiento || false,
+        programaBilinguismo: data.programaBilinguismo || false,
+        atencionInstituciones: data.atencionInstituciones || false,
+        posconflicto: data.posconflicto || false,
+        senaEmprendeRural: data.senaEmprendeRural || false,
+        formacionEspecialMypimes: data.formacionEspecialMypimes || false,
+        senaEmprendeRuralPosconflicto: data.senaEmprendeRuralPosconflicto || false,
+        tecnoacademiaSennova: data.tecnoacademiaSennova || false,
+        campesenaConvenio8842: data.campesenaConvenio8842 || false,
+        fullPopularConvenio8882: data.fullPopularConvenio8882 || false,
+        icbfInstituto: data.icbfInstituto || false,
+        policiaNacional: data.policiaNacional || false,
+        otroEspecificar: data.otroEspecificar,
+
+        // Fechas de programación
+        inicioInscripcion: new Date(data.inicioInscripcion),
+        finalizacionInscripcion: new Date(data.finalizacionInscripcion),
+        fechaInicioCurso: new Date(data.fechaInicioCurso),
+        fechaFinalizacionCurso: new Date(data.fechaFinalizacionCurso),
+
+        // Justificación académica
         justificacion: data.justificacion,
         objetivosPersonalizados: data.objetivosPersonalizados || [],
         resultadosEsperados: data.resultadosEsperados,
-        metodologia: data.metodologia,
-        recursosNecesarios: data.recursosNecesarios,
-        criteriosEvaluacion: data.criteriosEvaluacion,
         observaciones: data.observaciones,
-        cumpleRequisitos: data.cumpleRequisitos,
-        autorizaUsoInfo: data.autorizaUsoInfo,
-        confirmaVeracidad: data.confirmaVeracidad,
+
+        // Validaciones
+        cumpleRequisitos: data.cumpleRequisitos || false,
+        autorizaUsoInfo: data.autorizaUsoInfo || false,
+        confirmaVeracidad: data.confirmaVeracidad || false,
         estado: data.isDraft ? "BORRADOR" : "PENDIENTE",
+
         horarios: {
           create:
             data.horarios?.map((horario: any) => ({
               diaSemana: horario.diaSemana,
+              fecha: horario.fecha ? new Date(horario.fecha) : null,
               horaInicio: horario.horaInicio,
               horaFin: horario.horaFin,
+              esFlexible: horario.esFlexible !== undefined ? horario.esFlexible : true,
+              observaciones: horario.observaciones,
             })) || [],
         },
       },

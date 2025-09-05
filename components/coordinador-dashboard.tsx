@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Users,
   UserPlus,
@@ -20,122 +21,348 @@ import {
   XCircle,
   Clock,
   Award,
+  Filter,
+  Building,
 } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
+import { SolicitudDetalleModal } from "@/components/solicitud-detalle-modal"
+
+interface Solicitud {
+  id: string
+  codigo: string
+  estado: string
+  fechaInicio: string
+  fechaFin: string
+  numeroAprendices: number
+  nombreEmpresa: string
+  justificacion: string
+  createdAt: string
+  instructor: {
+    name: string
+    email: string
+    especialidad?: string
+  }
+  programa: {
+    nombre: string
+    codigo: string
+    duracionHoras: number
+    modalidad: string
+    centro: {
+      nombre: string
+    }
+  }
+  horarios: Array<{
+    id: string
+    diaSemana: string
+    horaInicio: string
+    horaFin: string
+  }>
+}
+
+interface Instructor {
+  id: string
+  name: string
+  email: string
+  cedula: string
+  telefono?: string
+  especialidad?: string
+  fechaIngreso?: string
+  estado: string
+  fichasAsignadas: Array<{
+    numero: string
+    programa: string
+    aprendices: number
+  }>
+  solicitudesFormacion: number
+  horasFormacion: number
+}
 
 export function CoordinadorDashboard() {
-  const coordinador = {
-    nombre: "Carlos Rodríguez",
-    centro: "Centro de Gestión Agroempresarial del Oriente",
-    email: "carlos.rodriguez@sena.edu.co",
-  }
-
+  const { user, token } = useAuth()
   const [searchTerm, setSearchTerm] = useState("")
+  const [estadoFilter, setEstadoFilter] = useState("all")
+  const [loading, setLoading] = useState(true)
+  const [loadingSolicitudes, setLoadingSolicitudes] = useState(false)
+  const [selectedSolicitudId, setSelectedSolicitudId] = useState<string | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
-  // Fichas pendientes de aprobación
-  const [fichasPendientes, setFichasPendientes] = useState([
-    {
-      id: "FICHA-2024-001",
-      numero: "2024001",
-      programa: "Tecnólogo en Análisis y Desarrollo de Software",
-      instructor: "María González Pérez",
-      aprendices: 25,
-      fechaSolicitud: "2024-01-20",
-      fechaInicio: "2024-02-15",
-      duracion: "24 meses",
-      modalidad: "Presencial",
-      estado: "pendiente",
-      justificacion: "Ficha solicitada para atender la demanda de formación en desarrollo de software en la región.",
-    },
-    {
-      id: "FICHA-2024-002",
-      numero: "2024002",
-      programa: "Técnico en Biotecnología",
-      instructor: "Ana María Pérez López",
-      aprendices: 20,
-      fechaSolicitud: "2024-01-18",
-      fechaInicio: "2024-03-01",
-      duracion: "18 meses",
-      modalidad: "Presencial",
-      estado: "pendiente",
-      justificacion: "Necesidad de formar técnicos especializados en biotecnología para el sector agropecuario.",
-    },
-  ])
+  const [solicitudes, setSolicitudes] = useState<Solicitud[]>([])
+  const [instructores, setInstructores] = useState<Instructor[]>([])
+  const [estadisticas, setEstadisticas] = useState({
+    solicitudesPendientes: 0,
+    totalInstructores: 0,
+    instructoresActivos: 0,
+    totalSolicitudesActivas: 0,
+    totalAprendices: 0,
+  })
 
-  // Instructores del centro
-  const [instructores, setInstructores] = useState([
-    {
-      id: "INST-001",
-      nombres: "María",
-      apellidos: "González Pérez",
-      cedula: "1234567890",
-      email: "maria.gonzalez@sena.edu.co",
-      telefono: "+57 300 123 4567",
-      especialidad: "Análisis y Desarrollo de Software",
-      fechaIngreso: "2023-03-15",
-      estado: "activo",
-      fichasAsignadas: [
-        { numero: "2023-045", programa: "Tecnólogo en Análisis y Desarrollo de Software", aprendices: 25 },
-      ],
-      solicitudesFormacion: 2,
-      horasFormacion: 120,
-    },
-    {
-      id: "INST-002",
-      nombres: "Ana María",
-      apellidos: "Pérez López",
-      cedula: "0987654321",
-      email: "ana.perez@sena.edu.co",
-      telefono: "+57 301 234 5678",
-      especialidad: "Biotecnología Agropecuaria",
-      fechaIngreso: "2023-01-20",
-      estado: "activo",
-      fichasAsignadas: [{ numero: "2023-046", programa: "Técnico en Biotecnología", aprendices: 20 }],
-      solicitudesFormacion: 1,
-      horasFormacion: 80,
-    },
-    {
-      id: "INST-003",
-      nombres: "Luis Fernando",
-      apellidos: "Martínez Silva",
-      cedula: "1122334455",
-      email: "luis.martinez@sena.edu.co",
-      telefono: "+57 302 345 6789",
-      especialidad: "Gestión Empresarial",
-      fechaIngreso: "2022-08-10",
-      estado: "activo",
-      fichasAsignadas: [],
-      solicitudesFormacion: 0,
-      horasFormacion: 200,
-    },
-  ])
+  useEffect(() => {
+    if (user && token) {
+      loadDashboardData()
+    }
+  }, [user, token])
 
-  const estadisticas = {
-    fichasPendientes: fichasPendientes.length,
-    totalInstructores: instructores.length,
-    instructoresActivos: instructores.filter((i) => i.estado === "activo").length,
-    totalFichasActivas: instructores.reduce((acc, i) => acc + i.fichasAsignadas.length, 0),
-    totalAprendices: instructores.reduce(
-      (acc, i) => acc + i.fichasAsignadas.reduce((sum, f) => sum + f.aprendices, 0),
-      0,
-    ),
+  const loadDashboardData = async () => {
+    setLoading(true)
+    try {
+      await Promise.all([loadSolicitudes(), loadInstructores()])
+    } catch (error) {
+      console.error("Error loading dashboard data:", error)
+    } finally {
+      setLoading(false)
+    }
   }
+
+  const loadSolicitudes = async () => {
+    if (!token) return
+
+    setLoadingSolicitudes(true)
+    try {
+      const estadoParam = estadoFilter !== "all" ? `&estado=${estadoFilter}` : ""
+      const response = await fetch(`/api/solicitudes?limit=50${estadoParam}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setSolicitudes(data.solicitudes || [])
+
+        const pendientes = data.solicitudes?.filter((s: Solicitud) => s.estado === "PENDIENTE").length || 0
+        const activas =
+          data.solicitudes?.filter((s: Solicitud) => ["APROBADA", "EN_CURSO"].includes(s.estado)).length || 0
+        const totalAprendices =
+          data.solicitudes?.reduce((sum: number, s: Solicitud) => sum + s.numeroAprendices, 0) || 0
+
+        setEstadisticas((prev) => ({
+          ...prev,
+          solicitudesPendientes: pendientes,
+          totalSolicitudesActivas: activas,
+          totalAprendices,
+        }))
+      }
+    } catch (error) {
+      console.error("Error loading solicitudes:", error)
+    } finally {
+      setLoadingSolicitudes(false)
+    }
+  }
+
+  const loadInstructores = async () => {
+    if (!token) return
+
+    try {
+      // For now, we'll use mock data but structure it properly
+      const mockInstructores: Instructor[] = [
+        {
+          id: "INST-001",
+          name: "María González Pérez",
+          email: "maria.gonzalez@sena.edu.co",
+          cedula: "1234567890",
+          telefono: "+57 300 123 4567",
+          especialidad: "Análisis y Desarrollo de Software",
+          fechaIngreso: "2023-03-15",
+          estado: "activo",
+          fichasAsignadas: [
+            { numero: "2023-045", programa: "Tecnólogo en Análisis y Desarrollo de Software", aprendices: 25 },
+          ],
+          solicitudesFormacion: 2,
+          horasFormacion: 120,
+        },
+        {
+          id: "INST-002",
+          name: "Ana María Pérez López",
+          email: "ana.perez@sena.edu.co",
+          cedula: "0987654321",
+          telefono: "+57 301 234 5678",
+          especialidad: "Biotecnología Agropecuaria",
+          fechaIngreso: "2023-01-20",
+          estado: "activo",
+          fichasAsignadas: [{ numero: "2023-046", programa: "Técnico en Biotecnología", aprendices: 20 }],
+          solicitudesFormacion: 1,
+          horasFormacion: 80,
+        },
+      ]
+
+      setInstructores(mockInstructores)
+      setEstadisticas((prev) => ({
+        ...prev,
+        totalInstructores: mockInstructores.length,
+        instructoresActivos: mockInstructores.filter((i) => i.estado === "activo").length,
+      }))
+    } catch (error) {
+      console.error("Error loading instructores:", error)
+    }
+  }
+
+  const filteredSolicitudes = solicitudes.filter((solicitud) => {
+    const matchesSearch =
+      solicitud.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      solicitud.programa.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      solicitud.instructor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      solicitud.nombreEmpresa.toLowerCase().includes(searchTerm.toLowerCase())
+
+    const matchesStatus = estadoFilter === "all" || solicitud.estado === estadoFilter.toUpperCase()
+
+    return matchesSearch && matchesStatus
+  })
 
   const filteredInstructores = instructores.filter(
     (instructor) =>
-      instructor.nombres.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      instructor.apellidos.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      instructor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      instructor.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       instructor.cedula.includes(searchTerm) ||
-      instructor.especialidad.toLowerCase().includes(searchTerm.toLowerCase()),
+      (instructor.especialidad && instructor.especialidad.toLowerCase().includes(searchTerm.toLowerCase())),
   )
 
-  const handleApprobarFicha = (fichaId: string) => {
-    setFichasPendientes((prev) => prev.filter((f) => f.id !== fichaId))
-    console.log(`Ficha ${fichaId} aprobada`)
+  const handleAprobarSolicitud = async (solicitudId: string) => {
+    if (!token) return
+
+    const comentarios = prompt("Ingrese comentarios adicionales para la aprobación (opcional):")
+
+    try {
+      const response = await fetch(`/api/solicitudes/${solicitudId}/approve`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ comentarios }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        await loadSolicitudes() // Reload data
+        alert(`Solicitud aprobada exitosamente. Número de ficha asignado: ${data.solicitud.numeroFicha}`)
+      } else {
+        const errorData = await response.json()
+        alert(`Error: ${errorData.error}`)
+      }
+    } catch (error) {
+      console.error("Error approving solicitud:", error)
+      alert("Error al aprobar la solicitud")
+    }
   }
 
-  const handleRechazarFicha = (fichaId: string) => {
-    setFichasPendientes((prev) => prev.filter((f) => f.id !== fichaId))
-    console.log(`Ficha ${fichaId} rechazada`)
+  const handleRechazarSolicitud = async (solicitudId: string) => {
+    if (!token) return
+
+    const comentarios = prompt("Ingrese los comentarios para el rechazo (opcional):")
+
+    try {
+      const response = await fetch(`/api/solicitudes/${solicitudId}/reject`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ comentarios }),
+      })
+
+      if (response.ok) {
+        await loadSolicitudes() // Reload data
+        alert("Solicitud rechazada exitosamente")
+      } else {
+        const errorData = await response.json()
+        alert(`Error: ${errorData.error}`)
+      }
+    } catch (error) {
+      console.error("Error rejecting solicitud:", error)
+      alert("Error al rechazar la solicitud")
+    }
+  }
+
+  const handleVerDetalles = (solicitudId: string) => {
+    setSelectedSolicitudId(solicitudId)
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setSelectedSolicitudId(null)
+    setIsModalOpen(false)
+  }
+
+  const handleModalApprove = async (id: string, comentarios: string) => {
+    const response = await fetch(`/api/solicitudes/${id}/approve`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ comentarios }),
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      await loadSolicitudes()
+      alert(`Solicitud aprobada exitosamente. Número de ficha asignado: ${data.solicitud.numeroFicha}`)
+    } else {
+      const errorData = await response.json()
+      alert(`Error: ${errorData.error}`)
+    }
+  }
+
+  const handleModalReject = async (id: string, comentarios: string) => {
+    const response = await fetch(`/api/solicitudes/${id}/reject`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ comentarios }),
+    })
+
+    if (response.ok) {
+      await loadSolicitudes()
+      alert("Solicitud rechazada exitosamente")
+    } else {
+      const errorData = await response.json()
+      alert(`Error: ${errorData.error}`)
+    }
+  }
+
+  const getStatusBadge = (estado: string) => {
+    switch (estado) {
+      case "PENDIENTE":
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800">
+            <Clock className="h-3 w-3 mr-1" />
+            Pendiente
+          </Badge>
+        )
+      case "APROBADA":
+        return (
+          <Badge className="bg-green-100 text-green-800">
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Aprobada
+          </Badge>
+        )
+      case "RECHAZADA":
+        return (
+          <Badge className="bg-red-100 text-red-800">
+            <XCircle className="h-3 w-3 mr-1" />
+            Rechazada
+          </Badge>
+        )
+      case "BORRADOR":
+        return <Badge className="bg-gray-100 text-gray-800">Borrador</Badge>
+      case "EN_CURSO":
+        return <Badge className="bg-blue-100 text-blue-800">En Curso</Badge>
+      default:
+        return <Badge variant="outline">{estado}</Badge>
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+        <p className="ml-3 text-gray-600">Cargando dashboard...</p>
+      </div>
+    )
   }
 
   return (
@@ -145,10 +372,13 @@ export function CoordinadorDashboard() {
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">¡Bienvenido, {coordinador.nombre}!</h2>
-              <p className="text-gray-600">{coordinador.centro}</p>
+              <h2 className="text-2xl font-bold text-gray-900">¡Bienvenido, {user?.name}!</h2>
+              <div className="flex items-center space-x-2 mt-1">
+                <Building className="h-4 w-4 text-gray-600" />
+                <p className="text-gray-600">{user?.centro?.nombre}</p>
+              </div>
               <p className="text-sm text-gray-500 mt-1">
-                Gestiona las fichas de formación, instructores y aprobaciones de tu centro
+                Gestiona las solicitudes de formación complementaria e instructores de tu centro
               </p>
             </div>
             <div className="text-right">
@@ -167,8 +397,8 @@ export function CoordinadorDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Fichas Pendientes</p>
-                <p className="text-2xl font-bold text-gray-900">{estadisticas.fichasPendientes}</p>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Solicitudes Pendientes</p>
+                <p className="text-2xl font-bold text-gray-900">{estadisticas.solicitudesPendientes}</p>
               </div>
               <Clock className="h-8 w-8 text-red-600" />
             </div>
@@ -191,8 +421,8 @@ export function CoordinadorDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Fichas Activas</p>
-                <p className="text-2xl font-bold text-gray-900">{estadisticas.totalFichasActivas}</p>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Solicitudes Activas</p>
+                <p className="text-2xl font-bold text-gray-900">{estadisticas.totalSolicitudesActivas}</p>
               </div>
               <FileText className="h-8 w-8 text-green-600" />
             </div>
@@ -225,11 +455,11 @@ export function CoordinadorDashboard() {
       </div>
 
       {/* Contenido Principal */}
-      <Tabs defaultValue="fichas" className="w-full">
+      <Tabs defaultValue="solicitudes" className="w-full">
         <TabsList className="grid w-full grid-cols-3 h-12">
-          <TabsTrigger value="fichas" className="flex items-center space-x-2">
+          <TabsTrigger value="solicitudes" className="flex items-center space-x-2">
             <FileText className="h-4 w-4" />
-            <span>Aprobar Fichas</span>
+            <span>Gestionar Solicitudes</span>
           </TabsTrigger>
           <TabsTrigger value="registro" className="flex items-center space-x-2">
             <UserPlus className="h-4 w-4" />
@@ -241,76 +471,113 @@ export function CoordinadorDashboard() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Pestaña 1: Aprobar Fichas */}
-        <TabsContent value="fichas" className="space-y-6 mt-6">
+        {/* Pestaña 1: Gestionar Solicitudes */}
+        <TabsContent value="solicitudes" className="space-y-6 mt-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
-                <FileText className="h-5 w-5 text-red-600" />
-                <span>Fichas Pendientes de Aprobación</span>
+                <FileText className="h-5 w-5 text-green-600" />
+                <span>Solicitudes de Formación Complementaria</span>
               </CardTitle>
-              <CardDescription>Revisa y aprueba las fichas de formación solicitadas para tu centro</CardDescription>
+              <CardDescription>Revisa, aprueba o rechaza las solicitudes de formación de tu centro</CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Buscar por código, programa, instructor o empresa..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div className="sm:w-48">
+                  <Select value={estadoFilter} onValueChange={setEstadoFilter}>
+                    <SelectTrigger>
+                      <Filter className="h-4 w-4 mr-2" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los estados</SelectItem>
+                      <SelectItem value="pendiente">Pendientes</SelectItem>
+                      <SelectItem value="aprobada">Aprobadas</SelectItem>
+                      <SelectItem value="rechazada">Rechazadas</SelectItem>
+                      <SelectItem value="borrador">Borradores</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={loadSolicitudes} disabled={loadingSolicitudes} variant="outline">
+                  {loadingSolicitudes ? "Cargando..." : "Actualizar"}
+                </Button>
+              </div>
+
               <div className="space-y-4">
-                {fichasPendientes.map((ficha) => (
-                  <Card key={ficha.id} className="border-l-4 border-l-red-400 hover:shadow-md transition-shadow">
+                {filteredSolicitudes.map((solicitud) => (
+                  <Card key={solicitud.id} className="border-l-4 border-l-blue-400 hover:shadow-md transition-shadow">
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center space-x-3 mb-3">
-                            <h4 className="text-lg font-semibold text-gray-900">Ficha #{ficha.numero}</h4>
-                            <Badge className="bg-red-100 text-red-800">
-                              <Clock className="h-3 w-3 mr-1" />
-                              Pendiente
-                            </Badge>
-                            <Badge className="bg-blue-100 text-blue-800">{ficha.aprendices} aprendices</Badge>
+                            <h4 className="text-lg font-semibold text-gray-900">{solicitud.codigo}</h4>
+                            {getStatusBadge(solicitud.estado)}
+                            <Badge className="bg-blue-100 text-blue-800">{solicitud.numeroAprendices} aprendices</Badge>
                           </div>
 
-                          <h5 className="text-md font-medium text-gray-800 mb-2">{ficha.programa}</h5>
+                          <h5 className="text-md font-medium text-gray-800 mb-2">{solicitud.programa.nombre}</h5>
 
                           <div className="grid md:grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
                             <div className="flex items-center space-x-2">
                               <Users className="h-4 w-4" />
-                              <span>Instructor: {ficha.instructor}</span>
+                              <span>Instructor: {solicitud.instructor.name}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Building className="h-4 w-4" />
+                              <span>Empresa: {solicitud.nombreEmpresa}</span>
                             </div>
                             <div className="flex items-center space-x-2">
                               <Calendar className="h-4 w-4" />
-                              <span>Inicio: {new Date(ficha.fechaInicio).toLocaleDateString("es-CO")}</span>
+                              <span>Inicio: {format(new Date(solicitud.fechaInicio), "PPP", { locale: es })}</span>
                             </div>
                             <div className="flex items-center space-x-2">
                               <Clock className="h-4 w-4" />
-                              <span>Duración: {ficha.duracion}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <FileText className="h-4 w-4" />
-                              <span>Modalidad: {ficha.modalidad}</span>
+                              <span>Duración: {solicitud.programa.duracionHoras}h</span>
                             </div>
                           </div>
 
-                          <div className="bg-gray-50 rounded-lg p-4">
-                            <h6 className="font-medium text-gray-900 mb-2">Justificación:</h6>
-                            <p className="text-sm text-gray-700">{ficha.justificacion}</p>
-                          </div>
+                          {solicitud.justificacion && (
+                            <div className="bg-gray-50 rounded-lg p-4">
+                              <h6 className="font-medium text-gray-900 mb-2">Justificación:</h6>
+                              <p className="text-sm text-gray-700 line-clamp-3">{solicitud.justificacion}</p>
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex flex-col space-y-2 ml-4">
-                          <Button
-                            onClick={() => handleApprobarFicha(ficha.id)}
-                            className="bg-green-600 hover:bg-green-700 text-white"
-                          >
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            Aprobar
-                          </Button>
-                          <Button
-                            onClick={() => handleRechazarFicha(ficha.id)}
-                            variant="outline"
-                            className="border-red-600 text-red-600 hover:bg-red-50"
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Rechazar
-                          </Button>
-                          <Button variant="outline" size="sm">
+                          {solicitud.estado === "PENDIENTE" && (
+                            <>
+                              <Button
+                                onClick={() => handleAprobarSolicitud(solicitud.id)}
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                                size="sm"
+                              >
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Aprobar
+                              </Button>
+                              <Button
+                                onClick={() => handleRechazarSolicitud(solicitud.id)}
+                                variant="outline"
+                                className="border-red-600 text-red-600 hover:bg-red-50"
+                                size="sm"
+                              >
+                                <XCircle className="h-4 w-4 mr-1" />
+                                Rechazar
+                              </Button>
+                            </>
+                          )}
+                          <Button variant="outline" size="sm" onClick={() => handleVerDetalles(solicitud.id)}>
                             <Eye className="h-4 w-4 mr-1" />
                             Ver Detalles
                           </Button>
@@ -320,13 +587,26 @@ export function CoordinadorDashboard() {
                   </Card>
                 ))}
 
-                {fichasPendientes.length === 0 && (
+                {filteredSolicitudes.length === 0 && !loadingSolicitudes && (
                   <div className="text-center py-12">
-                    <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <CheckCircle className="h-12 w-12 text-green-600" />
+                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <FileText className="h-12 w-12 text-gray-400" />
                     </div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">¡Excelente trabajo!</h3>
-                    <p className="text-gray-600">No hay fichas pendientes de aprobación en este momento.</p>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                      {searchTerm || estadoFilter !== "all" ? "No se encontraron solicitudes" : "No hay solicitudes"}
+                    </h3>
+                    <p className="text-gray-600">
+                      {searchTerm || estadoFilter !== "all"
+                        ? "Intenta ajustar los filtros de búsqueda"
+                        : "Las solicitudes de formación aparecerán aquí cuando los instructores las envíen"}
+                    </p>
+                  </div>
+                )}
+
+                {loadingSolicitudes && (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                    <p className="text-gray-600 mt-2">Cargando solicitudes...</p>
                   </div>
                 )}
               </div>
@@ -392,9 +672,7 @@ export function CoordinadorDashboard() {
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center space-x-3 mb-3">
-                            <h4 className="text-lg font-semibold text-gray-900">
-                              {instructor.nombres} {instructor.apellidos}
-                            </h4>
+                            <h4 className="text-lg font-semibold text-gray-900">{instructor.name}</h4>
                             <Badge className="bg-green-100 text-green-800">✅ {instructor.estado}</Badge>
                             <Badge className="bg-blue-100 text-blue-800">{instructor.especialidad}</Badge>
                           </div>
@@ -410,7 +688,12 @@ export function CoordinadorDashboard() {
                             </div>
                             <div className="flex items-center space-x-2">
                               <Calendar className="h-4 w-4" />
-                              <span>Desde {new Date(instructor.fechaIngreso).toLocaleDateString("es-CO")}</span>
+                              <span>
+                                Desde{" "}
+                                {instructor.fechaIngreso
+                                  ? format(new Date(instructor.fechaIngreso), "PPP", { locale: es })
+                                  : "N/A"}
+                              </span>
                             </div>
                           </div>
 
@@ -492,6 +775,14 @@ export function CoordinadorDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+      <SolicitudDetalleModal
+        solicitudId={selectedSolicitudId}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onApprove={handleModalApprove}
+        onReject={handleModalReject}
+        userRole={user?.role}
+      />
     </div>
   )
 }

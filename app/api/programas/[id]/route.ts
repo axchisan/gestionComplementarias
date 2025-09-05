@@ -5,6 +5,11 @@ import { prisma } from "@/lib/prisma"
 export const GET = withAuth(async (req: NextRequest, user, context) => {
   try {
     const { params } = context || {}
+    if (!params) {
+      return NextResponse.json({ error: "Parámetros no disponibles" }, { status: 400 })
+    }
+
+    // Await params before accessing properties (Next.js 15 requirement)
     const resolvedParams = await params
     if (!resolvedParams?.id) {
       return NextResponse.json({ error: "ID de programa requerido" }, { status: 400 })

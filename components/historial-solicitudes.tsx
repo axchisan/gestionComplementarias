@@ -9,36 +9,44 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, Download, Eye, Edit, FileText, Calendar, Clock, User, Filter, FileSpreadsheet } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/lib/auth-context"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
 
 interface Solicitud {
   id: string
-  numeroFicha: string
-  nombreCurso: string
-  instructor: string
+  codigo: string
+  numeroFicha?: string
+  estado: string
+  fechaCaracterizacion: string
   fechaSolicitud: string
-  fechaInicio: string
-  duracionHoras: number
-  modalidad: string
-  estado: "borrador" | "pendiente" | "en_revision" | "aprobada" | "rechazada"
-  tipoFormacion: string
-  version: string
-  numeroAprendices?: number
+  fechaInicioCurso: string
+  numeroAprendicesInscribir: number
+  instructor: {
+    name: string
+    email: string
+  }
+  programa: {
+    nombre: string
+    codigo: string
+    duracionHoras: number
+    modalidad: string
+  }
 }
 
 const estadoColors = {
-  borrador: "bg-gray-100 text-gray-800",
-  pendiente: "bg-yellow-100 text-yellow-800",
-  en_revision: "bg-blue-100 text-blue-800",
-  aprobada: "bg-green-100 text-green-800",
-  rechazada: "bg-red-100 text-red-800",
+  BORRADOR: "bg-gray-100 text-gray-800",
+  PENDIENTE: "bg-yellow-100 text-yellow-800",
+  EN_REVISION: "bg-blue-100 text-blue-800",
+  APROBADA: "bg-green-100 text-green-800",
+  RECHAZADA: "bg-red-100 text-red-800",
 }
 
 const estadoLabels = {
-  borrador: "Borrador",
-  pendiente: "Pendiente",
-  en_revision: "En Revisión",
-  aprobada: "Aprobada",
-  rechazada: "Rechazada",
+  BORRADOR: "Borrador",
+  PENDIENTE: "Pendiente",
+  EN_REVISION: "En Revisión",
+  APROBADA: "Aprobada",
+  RECHAZADA: "Rechazada",
 }
 
 export function HistorialSolicitudes() {
@@ -48,7 +56,6 @@ export function HistorialSolicitudes() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedEstado, setSelectedEstado] = useState("todas")
-  const [selectedTipo, setSelectedTipo] = useState("todos")
   const [selectedYear, setSelectedYear] = useState("todos")
 
   useEffect(() => {
@@ -82,18 +89,17 @@ export function HistorialSolicitudes() {
 
   const filteredSolicitudes = solicitudes.filter((solicitud) => {
     const matchesSearch =
-      (solicitud.nombreCurso?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-      (solicitud.numeroFicha?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-      (solicitud.id?.toLowerCase() || "").includes(searchTerm.toLowerCase())
+      (solicitud.programa?.nombre?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+      (solicitud.codigo?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+      (solicitud.numeroFicha?.toLowerCase() || "").includes(searchTerm.toLowerCase())
 
     const matchesEstado = selectedEstado === "todas" || solicitud.estado === selectedEstado
-    const matchesTipo = selectedTipo === "todos" || (solicitud.tipoFormacion?.toLowerCase() || "") === selectedTipo
 
     const solicitudDate = solicitud.fechaSolicitud ? new Date(solicitud.fechaSolicitud) : new Date()
     const year = solicitudDate.getFullYear().toString()
     const matchesYear = selectedYear === "todos" || year === selectedYear
 
-    return matchesSearch && matchesEstado && matchesTipo && matchesYear
+    return matchesSearch && matchesEstado && matchesYear
   })
 
   const handleExportPDF = async (solicitud: Solicitud) => {
@@ -109,7 +115,7 @@ export function HistorialSolicitudes() {
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
-        a.download = `solicitud-${solicitud.numeroFicha}.pdf`
+        a.download = `solicitud-${solicitud.codigo}.pdf`
         a.click()
         window.URL.revokeObjectURL(url)
       }
@@ -131,7 +137,7 @@ export function HistorialSolicitudes() {
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
-        a.download = `solicitud-${solicitud.numeroFicha}.xlsx`
+        a.download = `solicitud-${solicitud.codigo}.xlsx`
         a.click()
         window.URL.revokeObjectURL(url)
       }
@@ -165,10 +171,10 @@ export function HistorialSolicitudes() {
   const getEstadisticas = () => {
     return {
       total: solicitudes.length,
-      borradores: solicitudes.filter((s) => s.estado === "borrador").length,
-      pendientes: solicitudes.filter((s) => s.estado === "pendiente").length,
-      aprobadas: solicitudes.filter((s) => s.estado === "aprobada").length,
-      rechazadas: solicitudes.filter((s) => s.estado === "rechazada").length,
+      borradores: solicitudes.filter((s) => s.estado === "BORRADOR").length,
+      pendientes: solicitudes.filter((s) => s.estado === "PENDIENTE").length,
+      aprobadas: solicitudes.filter((s) => s.estado === "APROBADA").length,
+      rechazadas: solicitudes.filter((s) => s.estado === "RECHAZADA").length,
     }
   }
 
@@ -240,7 +246,7 @@ export function HistorialSolicitudes() {
 
             <TabsContent value="lista" className="space-y-4">
               {/* Filtros */}
-              <div className="grid lg:grid-cols-5 md:grid-cols-3 gap-4">
+              <div className="grid lg:grid-cols-4 md:grid-cols-2 gap-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
@@ -257,23 +263,11 @@ export function HistorialSolicitudes() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todas">Todos los estados</SelectItem>
-                    <SelectItem value="borrador">Borradores</SelectItem>
-                    <SelectItem value="pendiente">Pendientes</SelectItem>
-                    <SelectItem value="en_revision">En Revisión</SelectItem>
-                    <SelectItem value="aprobada">Aprobadas</SelectItem>
-                    <SelectItem value="rechazada">Rechazadas</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={selectedTipo} onValueChange={setSelectedTipo}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos los tipos</SelectItem>
-                    <SelectItem value="complementaria">Complementaria</SelectItem>
-                    <SelectItem value="transversal">Transversal</SelectItem>
-                    <SelectItem value="especifica">Específica</SelectItem>
+                    <SelectItem value="BORRADOR">Borradores</SelectItem>
+                    <SelectItem value="PENDIENTE">Pendientes</SelectItem>
+                    <SelectItem value="EN_REVISION">En Revisión</SelectItem>
+                    <SelectItem value="APROBADA">Aprobadas</SelectItem>
+                    <SelectItem value="RECHAZADA">Rechazadas</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -288,7 +282,15 @@ export function HistorialSolicitudes() {
                   </SelectContent>
                 </Select>
 
-                <Button variant="outline" className="flex items-center space-x-2 bg-transparent">
+                <Button
+                  variant="outline"
+                  className="flex items-center space-x-2 bg-transparent"
+                  onClick={() => {
+                    setSearchTerm("")
+                    setSelectedEstado("todas")
+                    setSelectedYear("todos")
+                  }}
+                >
                   <Filter className="h-4 w-4" />
                   <span>Limpiar Filtros</span>
                 </Button>
@@ -303,48 +305,62 @@ export function HistorialSolicitudes() {
                         <div className="flex-1 space-y-3">
                           <div className="flex items-start justify-between">
                             <div>
-                              <h3 className="text-lg font-semibold text-gray-900">{solicitud.nombreCurso}</h3>
+                              <h3 className="text-lg font-semibold text-gray-900">{solicitud.programa.nombre}</h3>
                               <p className="text-sm text-gray-600">
-                                {solicitud.id} • Ficha: {solicitud.numeroFicha} • v{solicitud.version}
+                                {solicitud.codigo}
+                                {solicitud.numeroFicha && ` • Ficha: ${solicitud.numeroFicha}`}
                               </p>
                             </div>
-                            <Badge className={estadoColors[solicitud.estado]}>{estadoLabels[solicitud.estado]}</Badge>
+                            <Badge className={estadoColors[solicitud.estado] || "bg-gray-100 text-gray-800"}>
+                              {estadoLabels[solicitud.estado] || solicitud.estado}
+                            </Badge>
                           </div>
 
                           <div className="grid md:grid-cols-4 gap-4 text-sm text-gray-600">
                             <div className="flex items-center space-x-2">
                               <Calendar className="h-4 w-4" />
-                              <span>Solicitud: {new Date(solicitud.fechaSolicitud).toLocaleDateString("es-CO")}</span>
+                              <span>
+                                Solicitud:{" "}
+                                {solicitud.fechaSolicitud
+                                  ? format(new Date(solicitud.fechaSolicitud), "PPP", { locale: es })
+                                  : "N/A"}
+                              </span>
                             </div>
                             <div className="flex items-center space-x-2">
                               <Clock className="h-4 w-4" />
-                              <span>{solicitud.duracionHoras} horas</span>
+                              <span>{solicitud.programa.duracionHoras} horas</span>
                             </div>
                             <div className="flex items-center space-x-2">
                               <FileText className="h-4 w-4" />
-                              <span>{solicitud.modalidad}</span>
+                              <span>{solicitud.programa.modalidad}</span>
                             </div>
-                            {solicitud.numeroAprendices && (
-                              <div className="flex items-center space-x-2">
-                                <User className="h-4 w-4" />
-                                <span>{solicitud.numeroAprendices} aprendices</span>
-                              </div>
-                            )}
+                            <div className="flex items-center space-x-2">
+                              <User className="h-4 w-4" />
+                              <span>{solicitud.numeroAprendicesInscribir} aprendices</span>
+                            </div>
                           </div>
 
                           <div className="flex items-center space-x-2">
-                            <Badge variant="outline">{solicitud.tipoFormacion}</Badge>
-                            <Badge variant="outline">{solicitud.modalidad}</Badge>
+                            <Badge variant="outline">Complementaria</Badge>
+                            <Badge variant="outline">{solicitud.programa.modalidad}</Badge>
                           </div>
                         </div>
 
                         <div className="flex items-center space-x-2 ml-4">
-                          <Button variant="outline" size="sm">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => (window.location.href = `/solicitudes/${solicitud.id}`)}
+                          >
                             <Eye className="h-4 w-4 mr-1" />
                             Ver
                           </Button>
-                          {solicitud.estado === "borrador" && (
-                            <Button variant="outline" size="sm">
+                          {(solicitud.estado === "PENDIENTE" || solicitud.estado === "BORRADOR") && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => (window.location.href = `/editar-solicitud/${solicitud.id}`)}
+                            >
                               <Edit className="h-4 w-4 mr-1" />
                               Editar
                             </Button>
@@ -387,7 +403,12 @@ export function HistorialSolicitudes() {
                         ? "Aún no has creado ninguna solicitud de formación complementaria"
                         : "Intenta ajustar los filtros de búsqueda"}
                     </p>
-                    <Button className="bg-green-600 hover:bg-green-700 text-white">Nueva Solicitud</Button>
+                    <Button
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => (window.location.href = "/nueva-solicitud")}
+                    >
+                      Nueva Solicitud
+                    </Button>
                   </CardContent>
                 </Card>
               )}

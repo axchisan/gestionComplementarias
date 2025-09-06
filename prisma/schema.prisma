@@ -27,6 +27,7 @@ model User {
   
   // Relaciones
   solicitudes Solicitud[]
+  notificaciones Notificacion[]
   
   @@map("users")
 }
@@ -187,6 +188,8 @@ model Solicitud {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
+  notificaciones        Notificacion[]
+  
   @@map("solicitudes")
 }
 
@@ -204,6 +207,25 @@ model HorarioDetallado {
   observaciones String? // Observaciones específicas del horario
   
   @@map("horarios_detallados")
+}
+
+model Notificacion {
+  id          String   @id @default(cuid())
+  tipo        TipoNotificacion
+  titulo      String
+  mensaje     String
+  leida       Boolean  @default(false)
+  fechaCreada DateTime @default(now())
+  
+  // Relaciones
+  usuarioId   String
+  usuario     User     @relation(fields: [usuarioId], references: [id])
+  
+  // Datos adicionales según el tipo
+  solicitudId String?
+  solicitud   Solicitud? @relation(fields: [solicitudId], references: [id])
+  
+  @@map("notificaciones")
 }
 
 // Enums
@@ -245,4 +267,14 @@ enum DiaSemana {
   VIERNES
   SABADO
   DOMINGO
+}
+
+enum TipoNotificacion {
+  NUEVA_SOLICITUD
+  SOLICITUD_APROBADA
+  SOLICITUD_RECHAZADA
+  SOLICITUD_REVISION
+  ASIGNACION_FICHA
+  RECORDATORIO
+  SISTEMA
 }

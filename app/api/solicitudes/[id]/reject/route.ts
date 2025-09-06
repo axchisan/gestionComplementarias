@@ -1,11 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { withRole } from "@/lib/middleware"
 import { prisma } from "@/lib/prisma"
+import { NotificationService } from "@/lib/notification-service"
 
 export const POST = withRole(["COORDINADOR", "ADMIN"])(
-  async (req: NextRequest, user, { params }: { params: { id: string } }) => {
+  async (req: NextRequest, user, { params }: { params: Promise<{ id: string }> }) => {
     try {
       const { comentarios } = await req.json()
+      const { id } = await params
 
       if (!comentarios || comentarios.trim().length === 0) {
         return NextResponse.json(
@@ -15,8 +17,11 @@ export const POST = withRole(["COORDINADOR", "ADMIN"])(
       }
 
       const solicitud = await prisma.solicitud.findUnique({
-        where: { id: params.id },
-        include: { programa: true },
+        where: { id },
+        include: {
+          programa: true,
+          instructor: { select: { id: true, name: true, email: true } },
+        },
       })
 
       if (!solicitud) {
@@ -33,7 +38,7 @@ export const POST = withRole(["COORDINADOR", "ADMIN"])(
       }
 
       const solicitudRechazada = await prisma.solicitud.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           estado: "RECHAZADA",
           fechaRevision: new Date(),
@@ -44,6 +49,18 @@ export const POST = withRole(["COORDINADOR", "ADMIN"])(
           programa: { select: { nombre: true } },
         },
       })
+
+      try {
+        await NotificationService.notificarSolicitudRechazada(
+          solicitud.id,
+          solicitud.instructor.id,
+          solicitud.codigo,
+          comentarios,
+        )
+      } catch (notificationError) {
+        console.error("Error creating notification:", notificationError)
+        // Don't fail the rejection if notification fails
+      }
 
       return NextResponse.json({
         message: "Solicitud rechazada",

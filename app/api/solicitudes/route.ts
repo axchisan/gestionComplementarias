@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { withAuth } from "@/lib/middleware"
 import { prisma } from "@/lib/prisma"
+import { NotificationService } from "@/lib/notification-service"
 
 export const GET = withAuth(async (req: NextRequest, user) => {
   try {
@@ -83,6 +84,16 @@ export const POST = withAuth(async (req: NextRequest, user) => {
         id: data.programaId,
         centroId: user.centroId,
         isActive: true,
+      },
+      include: {
+        centro: {
+          include: {
+            usuarios: {
+              where: { role: "COORDINADOR", isActive: true },
+              select: { id: true, name: true },
+            },
+          },
+        },
       },
     })
 
@@ -193,8 +204,29 @@ export const POST = withAuth(async (req: NextRequest, user) => {
           select: { nombre: true, codigo: true },
         },
         horarios: true,
+        instructor: {
+          select: { name: true },
+        },
       },
     })
+
+    if (!data.isDraft && programa.centro.usuarios.length > 0) {
+      try {
+        // Notify all coordinators in the center
+        const notificationPromises = programa.centro.usuarios.map((coordinador) =>
+          NotificationService.notificarNuevaSolicitud(
+            solicitud.id,
+            coordinador.id,
+            solicitud.instructor.name,
+            solicitud.codigo,
+          ),
+        )
+        await Promise.all(notificationPromises)
+      } catch (notificationError) {
+        console.error("Error creating notifications:", notificationError)
+        // Don't fail the solicitud creation if notification fails
+      }
+    }
 
     return NextResponse.json(
       {

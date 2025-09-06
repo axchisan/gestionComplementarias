@@ -5,11 +5,12 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { CheckCircle, Clock, Eye, Users, Calendar, Building, Search, Filter } from "lucide-react"
+import { CheckCircle, Clock, Eye, Users, Calendar, Building, Search, Filter, XCircle } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { SolicitudDetalleModal } from "./solicitud-detalle-modal"
+import { ApprovalModal } from "./approval-modal"
 
 interface SolicitudPendiente {
   id: string
@@ -41,6 +42,8 @@ export function SolicitudesPendientes() {
   const [estadoFilter, setEstadoFilter] = useState("all")
   const [selectedSolicitud, setSelectedSolicitud] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const [showApprovalModal, setShowApprovalModal] = useState(false)
+  const [selectedSolicitudForApproval, setSelectedSolicitudForApproval] = useState<SolicitudPendiente | null>(null)
   const [comentarios, setComentarios] = useState("")
   const [actionLoading, setActionLoading] = useState(false)
 
@@ -77,54 +80,50 @@ export function SolicitudesPendientes() {
     }
   }
 
-  const handleApprove = async (id: string, comentarios: string) => {
-    setActionLoading(true)
-    try {
-      const response = await fetch(`/api/solicitudes/${id}/approve`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ comentarios }),
-      })
-
-      if (response.ok) {
-        await loadSolicitudesPendientes()
-        setShowModal(false)
-        setSelectedSolicitud(null)
-        setComentarios("")
-      }
-    } catch (error) {
-      console.error("Error approving solicitud:", error)
-    } finally {
-      setActionLoading(false)
-    }
+  const handleQuickApprove = async (solicitud: SolicitudPendiente) => {
+    setSelectedSolicitudForApproval(solicitud)
+    setShowApprovalModal(true)
   }
 
-  const handleReject = async (id: string, comentarios: string) => {
-    setActionLoading(true)
-    try {
-      const response = await fetch(`/api/solicitudes/${id}/reject`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ comentarios }),
-      })
+  const handleQuickReject = async (solicitud: SolicitudPendiente) => {
+    setSelectedSolicitudForApproval(solicitud)
+    setShowApprovalModal(true)
+  }
 
-      if (response.ok) {
-        await loadSolicitudesPendientes()
-        setShowModal(false)
-        setSelectedSolicitud(null)
-        setComentarios("")
-      }
-    } catch (error) {
-      console.error("Error rejecting solicitud:", error)
-    } finally {
-      setActionLoading(false)
+  const handleModalApprove = async (solicitudId: string, numeroFicha: string, comentarios?: string) => {
+    const response = await fetch(`/api/solicitudes/${solicitudId}/approve`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ numeroFicha, comentarios }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || "Error al aprobar la solicitud")
     }
+
+    await loadSolicitudesPendientes()
+  }
+
+  const handleModalReject = async (solicitudId: string, motivoRechazo: string) => {
+    const response = await fetch(`/api/solicitudes/${solicitudId}/reject`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ comentarios: motivoRechazo }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || "Error al rechazar la solicitud")
+    }
+
+    await loadSolicitudesPendientes()
   }
 
   const getStatusBadge = (estado: string) => {
@@ -288,6 +287,30 @@ export function SolicitudesPendientes() {
                     <Eye className="h-4 w-4 mr-1" />
                     Ver Detalles
                   </Button>
+
+                  {solicitud.estado === "PENDIENTE" && (
+                    <>
+                      <Button
+                        size="sm"
+                        onClick={() => handleQuickApprove(solicitud)}
+                        disabled={actionLoading}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        Aprobar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleQuickReject(solicitud)}
+                        disabled={actionLoading}
+                        className="border-red-600 text-red-600 hover:bg-red-50"
+                      >
+                        <XCircle className="h-4 w-4 mr-1" />
+                        Rechazar
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -322,9 +345,21 @@ export function SolicitudesPendientes() {
           setShowModal(false)
           setSelectedSolicitud(null)
         }}
-        onApprove={handleApprove}
-        onReject={handleReject}
+        onApprove={handleModalApprove}
+        onReject={handleModalReject}
         userRole={user?.role}
+      />
+
+      {/* Approval Modal */}
+      <ApprovalModal
+        isOpen={showApprovalModal}
+        onClose={() => {
+          setShowApprovalModal(false)
+          setSelectedSolicitudForApproval(null)
+        }}
+        solicitud={selectedSolicitudForApproval}
+        onApprove={handleModalApprove}
+        onReject={handleModalReject}
       />
     </div>
   )

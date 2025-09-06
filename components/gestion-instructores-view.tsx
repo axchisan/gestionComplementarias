@@ -58,8 +58,12 @@ interface Instructor {
   centro: {
     nombre: string
   }
-  _count: {
-    solicitudes: number
+  estadisticas?: {
+    totalSolicitudes: number
+    solicitudesAprobadas: number
+    tasaAprobacion: number
+    totalAprendices: number
+    solicitudesPendientes: number
   }
 }
 
@@ -250,7 +254,7 @@ export function GestionInstructoresView() {
         <Card>
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-purple-600">
-              {instructores.reduce((sum, i) => sum + i._count.solicitudes, 0)}
+              {instructores.reduce((sum, i) => sum + (i.estadisticas?.totalSolicitudes || 0), 0)}
             </div>
             <div className="text-sm text-gray-600">Total Solicitudes</div>
           </CardContent>
@@ -389,7 +393,7 @@ export function GestionInstructoresView() {
                         </>
                       )}
                     </Badge>
-                    <Badge variant="outline">{instructor._count.solicitudes} solicitudes</Badge>
+                    <Badge variant="outline">{instructor.estadisticas?.totalSolicitudes || 0} solicitudes</Badge>
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-4 text-sm text-gray-600">

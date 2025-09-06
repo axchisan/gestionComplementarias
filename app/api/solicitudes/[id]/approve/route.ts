@@ -1,15 +1,20 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { withRole } from "@/lib/middleware"
 import { prisma } from "@/lib/prisma"
+import { NotificationService } from "@/lib/notification-service"
 
 export const POST = withRole(["COORDINADOR", "ADMIN"])(
-  async (req: NextRequest, user, { params }: { params: { id: string } }) => {
+  async (req: NextRequest, user, { params }: { params: Promise<{ id: string }> }) => {
     try {
-      const { comentarios } = await req.json()
+      const { comentarios, numeroFicha } = await req.json()
+      const { id } = await params
 
       const solicitud = await prisma.solicitud.findUnique({
-        where: { id: params.id },
-        include: { programa: true },
+        where: { id },
+        include: {
+          programa: true,
+          instructor: { select: { id: true, name: true, email: true } },
+        },
       })
 
       if (!solicitud) {
@@ -25,37 +30,59 @@ export const POST = withRole(["COORDINADOR", "ADMIN"])(
         return NextResponse.json({ error: "La solicitud no está en un estado que permita aprobación" }, { status: 400 })
       }
 
-      // Generar número de ficha
-      const year = new Date().getFullYear()
-      const lastFicha = await prisma.solicitud.findFirst({
-        where: {
-          numeroFicha: { not: null },
-          numeroFicha: { startsWith: year.toString() },
-        },
-        orderBy: { numeroFicha: "desc" },
-      })
+      let finalNumeroFicha = numeroFicha
+      if (!finalNumeroFicha) {
+        const year = new Date().getFullYear()
+        const lastFicha = await prisma.solicitud.findFirst({
+          where: {
+            numeroFicha: { not: null },
+            numeroFicha: { startsWith: year.toString() },
+          },
+          orderBy: { numeroFicha: "desc" },
+        })
 
-      let nextFichaNumber = 1
-      if (lastFicha && lastFicha.numeroFicha) {
-        const lastNumber = Number.parseInt(lastFicha.numeroFicha.slice(-3))
-        nextFichaNumber = lastNumber + 1
+        let nextFichaNumber = 1
+        if (lastFicha && lastFicha.numeroFicha) {
+          const lastNumber = Number.parseInt(lastFicha.numeroFicha.slice(-4))
+          nextFichaNumber = lastNumber + 1
+        }
+
+        finalNumeroFicha = `${year}${nextFichaNumber.toString().padStart(4, "0")}`
       }
 
-      const numeroFicha = `${year}${nextFichaNumber.toString().padStart(3, "0")}`
+      const existingFicha = await prisma.solicitud.findFirst({
+        where: { numeroFicha: finalNumeroFicha },
+      })
+
+      if (existingFicha) {
+        return NextResponse.json({ error: "El número de ficha ya existe" }, { status: 400 })
+      }
 
       const solicitudAprobada = await prisma.solicitud.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           estado: "APROBADA",
           fechaAprobacion: new Date(),
           comentariosRevision: comentarios,
-          numeroFicha,
+          numeroFicha: finalNumeroFicha,
         },
         include: {
           instructor: { select: { name: true, email: true } },
           programa: { select: { nombre: true } },
         },
       })
+
+      try {
+        await NotificationService.notificarSolicitudAprobada(
+          solicitud.id,
+          solicitud.instructor.id,
+          solicitud.codigo,
+          finalNumeroFicha,
+        )
+      } catch (notificationError) {
+        console.error("Error creating notification:", notificationError)
+        // Don't fail the approval if notification fails
+      }
 
       return NextResponse.json({
         message: "Solicitud aprobada exitosamente",

@@ -439,14 +439,27 @@ export function SolicitudDetalleModal({
 
                 {solicitud.horarios.length > 0 && (
                   <div>
-                    <Label className="font-medium">Horarios</Label>
-                    <div className="mt-2 space-y-2">
+                    <Label className="font-medium">Horarios Detallados</Label>
+                    <div className="mt-2 space-y-3">
                       {solicitud.horarios.map((horario) => (
-                        <div key={horario.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span className="font-medium">{horario.diaSemana}</span>
-                          <span>
-                            {horario.horaInicio} - {horario.horaFin}
-                          </span>
+                        <div key={horario.id} className="p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium text-gray-900">{horario.diaSemana}</span>
+                            <span className="text-sm font-medium text-gray-700">
+                              {horario.horaInicio} - {horario.horaFin}
+                            </span>
+                          </div>
+                          {horario.fecha && (
+                            <div className="text-sm text-gray-600 mb-1">
+                              <Calendar className="h-3 w-3 inline mr-1" />
+                              Fecha específica: {format(new Date(horario.fecha), "PPP", { locale: es })}
+                            </div>
+                          )}
+                          {horario.observaciones && (
+                            <div className="text-sm text-gray-600">
+                              <span className="font-medium">Observaciones:</span> {horario.observaciones}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

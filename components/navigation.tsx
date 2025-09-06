@@ -34,7 +34,7 @@ export function Navigation() {
         { href: "/solicitudes-pendientes", label: "Solicitudes Pendientes", icon: CheckCircle },
         { href: "/todas-solicitudes", label: "Todas las Solicitudes", icon: FileText },
         { href: "/reportes-coordinador", label: "Reportes", icon: BarChart3 },
-        { href: "/instructores", label: "Instructores", icon: Users },
+        { href: "/gestion-instructores", label: "Instructores", icon: Users },
       ]
     }
 

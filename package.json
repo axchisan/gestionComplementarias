@@ -71,7 +71,12 @@
     "zod": "^3.23.8",
     "@prisma/client": "^5.7.1",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "@ai-sdk/openai": "^0.0.66",
+    "@neondatabase/serverless": "^0.10.1",
+    "ai": "^3.4.32",
+    "jspdf": "^2.5.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

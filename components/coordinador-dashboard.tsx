@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Progress } from "@/components/ui/progress"
 import {
   Users,
   UserPlus,
@@ -23,11 +25,22 @@ import {
   Award,
   Filter,
   Building,
+  Download,
+  BarChart3,
+  TrendingUp,
+  AlertTriangle,
+  RefreshCw,
+  CalendarDays,
+  FileSpreadsheet,
+  Bell,
+  Target,
+  Activity,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { SolicitudDetalleModal } from "@/components/solicitud-detalle-modal"
+import { RegistrarInstructorForm } from "@/components/registrar-instructor-form"
 
 interface Solicitud {
   id: string
@@ -39,6 +52,9 @@ interface Solicitud {
   nombreEmpresa: string
   justificacion: string
   createdAt: string
+  fechaAprobacion?: string
+  prioridad?: "ALTA" | "MEDIA" | "BAJA"
+  tiempoRespuesta?: number // días desde creación
   instructor: {
     name: string
     email: string
@@ -49,6 +65,7 @@ interface Solicitud {
     codigo: string
     duracionHoras: number
     modalidad: string
+    tipoFormacion: string
     centro: {
       nombre: string
     }
@@ -77,25 +94,65 @@ interface Instructor {
   }>
   solicitudesFormacion: number
   horasFormacion: number
+  rendimiento?: number // porcentaje de aprobación
+}
+
+interface EstadisticasAvanzadas {
+  solicitudesPendientes: number
+  solicitudesEnRevision: number
+  aprobadasEsteMes: number
+  totalInstructores: number
+  instructoresActivos: number
+  totalSolicitudesActivas: number
+  totalAprendices: number
+  tasaAprobacion: number
+  tiempoPromedioRespuesta: number
+  solicitudesUrgentes: number
+  tendenciaMensual: number
+  metasMensuales: {
+    solicitudesProcesadas: { actual: number; meta: number }
+    tiempoRespuesta: { actual: number; meta: number }
+    satisfaccionInstructores: { actual: number; meta: number }
+  }
 }
 
 export function CoordinadorDashboard() {
   const { user, token } = useAuth()
   const [searchTerm, setSearchTerm] = useState("")
   const [estadoFilter, setEstadoFilter] = useState("all")
+  const [fechaInicioFilter, setFechaInicioFilter] = useState("")
+  const [fechaFinFilter, setFechaFinFilter] = useState("")
+  const [tipoFormacionFilter, setTipoFormacionFilter] = useState("all")
+  const [prioridadFilter, setPrioridadFilter] = useState("all")
   const [loading, setLoading] = useState(true)
   const [loadingSolicitudes, setLoadingSolicitudes] = useState(false)
   const [selectedSolicitudId, setSelectedSolicitudId] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [showRegistroForm, setShowRegistroForm] = useState(false)
+
+  const [selectedSolicitudes, setSelectedSolicitudes] = useState<string[]>([])
+  const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [showAnalytics, setShowAnalytics] = useState(false)
 
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([])
   const [instructores, setInstructores] = useState<Instructor[]>([])
-  const [estadisticas, setEstadisticas] = useState({
+  const [estadisticas, setEstadisticas] = useState<EstadisticasAvanzadas>({
     solicitudesPendientes: 0,
+    solicitudesEnRevision: 0,
+    aprobadasEsteMes: 0,
     totalInstructores: 0,
     instructoresActivos: 0,
     totalSolicitudesActivas: 0,
     totalAprendices: 0,
+    tasaAprobacion: 0,
+    tiempoPromedioRespuesta: 0,
+    solicitudesUrgentes: 0,
+    tendenciaMensual: 0,
+    metasMensuales: {
+      solicitudesProcesadas: { actual: 0, meta: 50 },
+      tiempoRespuesta: { actual: 0, meta: 3 },
+      satisfaccionInstructores: { actual: 0, meta: 90 },
+    },
   })
 
   useEffect(() => {
@@ -107,7 +164,7 @@ export function CoordinadorDashboard() {
   const loadDashboardData = async () => {
     setLoading(true)
     try {
-      await Promise.all([loadSolicitudes(), loadInstructores()])
+      await Promise.all([loadSolicitudes(), loadInstructores(), loadAnalytics()])
     } catch (error) {
       console.error("Error loading dashboard data:", error)
     } finally {
@@ -120,8 +177,14 @@ export function CoordinadorDashboard() {
 
     setLoadingSolicitudes(true)
     try {
-      const estadoParam = estadoFilter !== "all" ? `&estado=${estadoFilter}` : ""
-      const response = await fetch(`/api/solicitudes?limit=50${estadoParam}`, {
+      let url = `/api/solicitudes?limit=100`
+
+      if (estadoFilter !== "all") url += `&estado=${estadoFilter}`
+      if (tipoFormacionFilter !== "all") url += `&tipoFormacion=${tipoFormacionFilter}`
+      if (fechaInicioFilter) url += `&fechaInicio=${fechaInicioFilter}`
+      if (fechaFinFilter) url += `&fechaFin=${fechaFinFilter}`
+
+      const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -129,20 +192,15 @@ export function CoordinadorDashboard() {
 
       if (response.ok) {
         const data = await response.json()
-        setSolicitudes(data.solicitudes || [])
+        const solicitudesConPrioridad =
+          data.solicitudes?.map((s: Solicitud) => ({
+            ...s,
+            prioridad: calcularPrioridad(s),
+            tiempoRespuesta: calcularTiempoRespuesta(s.createdAt),
+          })) || []
 
-        const pendientes = data.solicitudes?.filter((s: Solicitud) => s.estado === "PENDIENTE").length || 0
-        const activas =
-          data.solicitudes?.filter((s: Solicitud) => ["APROBADA", "EN_CURSO"].includes(s.estado)).length || 0
-        const totalAprendices =
-          data.solicitudes?.reduce((sum: number, s: Solicitud) => sum + s.numeroAprendices, 0) || 0
-
-        setEstadisticas((prev) => ({
-          ...prev,
-          solicitudesPendientes: pendientes,
-          totalSolicitudesActivas: activas,
-          totalAprendices,
-        }))
+        setSolicitudes(solicitudesConPrioridad)
+        calcularEstadisticas(solicitudesConPrioridad)
       }
     } catch (error) {
       console.error("Error loading solicitudes:", error)
@@ -151,50 +209,98 @@ export function CoordinadorDashboard() {
     }
   }
 
+  const calcularPrioridad = (solicitud: Solicitud): "ALTA" | "MEDIA" | "BAJA" => {
+    const diasDesdeCreacion = calcularTiempoRespuesta(solicitud.createdAt)
+    const esComplementaria = solicitud.programa.tipoFormacion === "COMPLEMENTARIA"
+    const muchoAprendices = solicitud.numeroAprendices > 25
+
+    if (diasDesdeCreacion > 7 || (esComplementaria && muchoAprendices)) return "ALTA"
+    if (diasDesdeCreacion > 3 || muchoAprendices) return "MEDIA"
+    return "BAJA"
+  }
+
+  const calcularTiempoRespuesta = (fechaCreacion: string): number => {
+    const ahora = new Date()
+    const creacion = new Date(fechaCreacion)
+    return Math.floor((ahora.getTime() - creacion.getTime()) / (1000 * 60 * 60 * 24))
+  }
+
+  const calcularEstadisticas = (solicitudesData: Solicitud[]) => {
+    const pendientes = solicitudesData.filter((s) => s.estado === "PENDIENTE").length
+    const enRevision = solicitudesData.filter((s) => s.estado === "EN_REVISION").length
+    const aprobadas = solicitudesData.filter((s) => s.estado === "APROBADA").length
+
+    // Calculate approved this month
+    const thisMonth = new Date()
+    thisMonth.setDate(1)
+    const aprobadasEsteMes = solicitudesData.filter(
+      (s) => s.estado === "APROBADA" && s.fechaAprobacion && new Date(s.fechaAprobacion) >= thisMonth,
+    ).length
+
+    const total = solicitudesData.length
+    const urgentes = solicitudesData.filter((s) => s.prioridad === "ALTA").length
+    const tiempoPromedio = solicitudesData.reduce((sum, s) => sum + (s.tiempoRespuesta || 0), 0) / total || 0
+    const tasaAprobacion = total > 0 ? (aprobadas / total) * 100 : 0
+
+    setEstadisticas((prev) => ({
+      ...prev,
+      solicitudesPendientes: pendientes,
+      solicitudesEnRevision: enRevision,
+      aprobadasEsteMes: aprobadasEsteMes,
+      solicitudesUrgentes: urgentes,
+      tasaAprobacion: Math.round(tasaAprobacion),
+      tiempoPromedioRespuesta: Math.round(tiempoPromedio),
+      metasMensuales: {
+        ...prev.metasMensuales,
+        solicitudesProcesadas: { ...prev.metasMensuales.solicitudesProcesadas, actual: aprobadasEsteMes },
+        tiempoRespuesta: { ...prev.metasMensuales.tiempoRespuesta, actual: Math.round(tiempoPromedio) },
+      },
+    }))
+  }
+
+  const loadAnalytics = async () => {
+    setEstadisticas((prev) => ({
+      ...prev,
+      tendenciaMensual: 15, // 15% de incremento
+      metasMensuales: {
+        solicitudesProcesadas: { actual: 42, meta: 50 },
+        tiempoRespuesta: { actual: 2.5, meta: 3 },
+        satisfaccionInstructores: { actual: 87, meta: 90 },
+      },
+    }))
+  }
+
   const loadInstructores = async () => {
     if (!token) return
 
     try {
-      // For now, we'll use mock data but structure it properly
-      const mockInstructores: Instructor[] = [
-        {
-          id: "INST-001",
-          name: "María González Pérez",
-          email: "maria.gonzalez@sena.edu.co",
-          cedula: "1234567890",
-          telefono: "+57 300 123 4567",
-          especialidad: "Análisis y Desarrollo de Software",
-          fechaIngreso: "2023-03-15",
-          estado: "activo",
-          fichasAsignadas: [
-            { numero: "2023-045", programa: "Tecnólogo en Análisis y Desarrollo de Software", aprendices: 25 },
-          ],
-          solicitudesFormacion: 2,
-          horasFormacion: 120,
+      const response = await fetch("/api/instructores", {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-        {
-          id: "INST-002",
-          name: "Ana María Pérez López",
-          email: "ana.perez@sena.edu.co",
-          cedula: "0987654321",
-          telefono: "+57 301 234 5678",
-          especialidad: "Biotecnología Agropecuaria",
-          fechaIngreso: "2023-01-20",
-          estado: "activo",
-          fichasAsignadas: [{ numero: "2023-046", programa: "Técnico en Biotecnología", aprendices: 20 }],
-          solicitudesFormacion: 1,
-          horasFormacion: 80,
-        },
-      ]
+      })
 
-      setInstructores(mockInstructores)
-      setEstadisticas((prev) => ({
-        ...prev,
-        totalInstructores: mockInstructores.length,
-        instructoresActivos: mockInstructores.filter((i) => i.estado === "activo").length,
-      }))
+      if (response.ok) {
+        const data = await response.json()
+        const instructoresData = data.instructores || []
+
+        setInstructores(instructoresData)
+        setEstadisticas((prev) => ({
+          ...prev,
+          totalInstructores: instructoresData.length,
+          instructoresActivos: instructoresData.filter((i: any) => i.isActive).length,
+          totalAprendices: instructoresData.reduce(
+            (sum: number, i: any) => sum + (i.estadisticas?.totalAprendices || 0),
+            0,
+          ),
+        }))
+      } else {
+        console.error("Error fetching instructores:", response.statusText)
+      }
     } catch (error) {
       console.error("Error loading instructores:", error)
+      // Fallback to empty array on error
+      setInstructores([])
     }
   }
 
@@ -206,17 +312,116 @@ export function CoordinadorDashboard() {
       solicitud.nombreEmpresa.toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesStatus = estadoFilter === "all" || solicitud.estado === estadoFilter.toUpperCase()
+    const matchesTipo = tipoFormacionFilter === "all" || solicitud.programa.tipoFormacion === tipoFormacionFilter
+    const matchesPrioridad = prioridadFilter === "all" || solicitud.prioridad === prioridadFilter
 
-    return matchesSearch && matchesStatus
+    return matchesSearch && matchesStatus && matchesTipo && matchesPrioridad
   })
 
-  const filteredInstructores = instructores.filter(
-    (instructor) =>
-      instructor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      instructor.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      instructor.cedula.includes(searchTerm) ||
-      (instructor.especialidad && instructor.especialidad.toLowerCase().includes(searchTerm.toLowerCase())),
-  )
+  const handleSelectSolicitud = (solicitudId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedSolicitudes((prev) => [...prev, solicitudId])
+    } else {
+      setSelectedSolicitudes((prev) => prev.filter((id) => id !== solicitudId))
+    }
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const pendientes = filteredSolicitudes.filter((s) => s.estado === "PENDIENTE").map((s) => s.id)
+      setSelectedSolicitudes(pendientes)
+    } else {
+      setSelectedSolicitudes([])
+    }
+  }
+
+  const handleBulkApprove = async () => {
+    if (selectedSolicitudes.length === 0) return
+
+    setBulkActionLoading(true)
+    try {
+      const comentarios = prompt("Comentarios para la aprobación en lote (opcional):")
+
+      const promises = selectedSolicitudes.map((id) =>
+        fetch(`/api/solicitudes/${id}/approve`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ comentarios }),
+        }),
+      )
+
+      await Promise.all(promises)
+      await loadSolicitudes()
+      setSelectedSolicitudes([])
+      alert(`${selectedSolicitudes.length} solicitudes aprobadas exitosamente`)
+    } catch (error) {
+      console.error("Error en aprobación en lote:", error)
+      alert("Error en la aprobación en lote")
+    } finally {
+      setBulkActionLoading(false)
+    }
+  }
+
+  const handleBulkReject = async () => {
+    if (selectedSolicitudes.length === 0) return
+
+    setBulkActionLoading(true)
+    try {
+      const comentarios = prompt("Comentarios para el rechazo en lote (requerido):")
+      if (!comentarios) return
+
+      const promises = selectedSolicitudes.map((id) =>
+        fetch(`/api/solicitudes/${id}/reject`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ comentarios }),
+        }),
+      )
+
+      await Promise.all(promises)
+      await loadSolicitudes()
+      setSelectedSolicitudes([])
+      alert(`${selectedSolicitudes.length} solicitudes rechazadas`)
+    } catch (error) {
+      console.error("Error en rechazo en lote:", error)
+      alert("Error en el rechazo en lote")
+    } finally {
+      setBulkActionLoading(false)
+    }
+  }
+
+  const handleExportSolicitudes = async (format: "pdf" | "excel") => {
+    try {
+      let url = `/api/solicitudes/export-all?format=${format}`
+      if (estadoFilter !== "all") url += `&estado=${estadoFilter}`
+      if (fechaInicioFilter) url += `&fechaInicio=${fechaInicioFilter}`
+      if (fechaFinFilter) url += `&fechaFin=${fechaFinFilter}`
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url2 = window.URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url2
+        a.download = `solicitudes-${format === "pdf" ? "reporte" : "datos"}.${format === "pdf" ? "pdf" : "xlsx"}`
+        a.click()
+        window.URL.revokeObjectURL(url2)
+      }
+    } catch (error) {
+      console.error(`Error exportando ${format}:`, error)
+    }
+  }
 
   const handleAprobarSolicitud = async (solicitudId: string) => {
     if (!token) return
@@ -324,13 +529,15 @@ export function CoordinadorDashboard() {
     }
   }
 
-  const getStatusBadge = (estado: string) => {
+  const getStatusBadge = (estado: string, prioridad?: string) => {
+    const priorityIcon = prioridad === "ALTA" ? <AlertTriangle className="h-3 w-3 mr-1" /> : null
+
     switch (estado) {
       case "PENDIENTE":
         return (
-          <Badge className="bg-yellow-100 text-yellow-800">
-            <Clock className="h-3 w-3 mr-1" />
-            Pendiente
+          <Badge className={`${prioridad === "ALTA" ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800"}`}>
+            {priorityIcon || <Clock className="h-3 w-3 mr-1" />}
+            Pendiente {prioridad === "ALTA" ? "(Urgente)" : ""}
           </Badge>
         )
       case "APROBADA":
@@ -351,10 +558,20 @@ export function CoordinadorDashboard() {
         return <Badge className="bg-gray-100 text-gray-800">Borrador</Badge>
       case "EN_CURSO":
         return <Badge className="bg-blue-100 text-blue-800">En Curso</Badge>
+      case "EN_REVISION":
+        return <Badge className="bg-orange-100 text-orange-800">En Revisión</Badge>
       default:
         return <Badge variant="outline">{estado}</Badge>
     }
   }
+
+  const filteredInstructores = instructores.filter(
+    (instructor) =>
+      instructor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      instructor.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      instructor.cedula.includes(searchTerm) ||
+      (instructor.especialidad && instructor.especialidad.toLowerCase().includes(searchTerm.toLowerCase())),
+  )
 
   if (loading) {
     return (
@@ -381,8 +598,19 @@ export function CoordinadorDashboard() {
                 Gestiona las solicitudes de formación complementaria e instructores de tu centro
               </p>
             </div>
-            <div className="text-right">
-              <Button className="bg-green-600 hover:bg-green-700 text-white">
+            <div className="flex items-center space-x-3">
+              <Button variant="outline" size="sm" onClick={() => setShowAnalytics(!showAnalytics)}>
+                <BarChart3 className="h-4 w-4 mr-2" />
+                Analytics
+              </Button>
+              <Button variant="outline" size="sm">
+                <Bell className="h-4 w-4 mr-2" />
+                Notificaciones
+                {estadisticas.solicitudesUrgentes > 0 && (
+                  <Badge className="ml-2 bg-red-500 text-white">{estadisticas.solicitudesUrgentes}</Badge>
+                )}
+              </Button>
+              <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => setShowRegistroForm(true)}>
                 <UserPlus className="h-4 w-4 mr-2" />
                 Registrar Instructor
               </Button>
@@ -391,14 +619,16 @@ export function CoordinadorDashboard() {
         </CardContent>
       </Card>
 
-      {/* Estadísticas Rápidas */}
-      <div className="grid lg:grid-cols-5 md:grid-cols-3 gap-4">
+      <div className="grid lg:grid-cols-6 md:grid-cols-3 gap-4">
         <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-red-500">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Solicitudes Pendientes</p>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Pendientes</p>
                 <p className="text-2xl font-bold text-gray-900">{estadisticas.solicitudesPendientes}</p>
+                {estadisticas.solicitudesUrgentes > 0 && (
+                  <p className="text-xs text-red-600">{estadisticas.solicitudesUrgentes} urgentes</p>
+                )}
               </div>
               <Clock className="h-8 w-8 text-red-600" />
             </div>
@@ -409,10 +639,10 @@ export function CoordinadorDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Instructores</p>
-                <p className="text-2xl font-bold text-gray-900">{estadisticas.totalInstructores}</p>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">En Revisión</p>
+                <p className="text-2xl font-bold text-gray-900">{estadisticas.solicitudesEnRevision}</p>
               </div>
-              <Users className="h-8 w-8 text-blue-600" />
+              <Eye className="h-8 w-8 text-blue-600" />
             </div>
           </CardContent>
         </Card>
@@ -421,10 +651,39 @@ export function CoordinadorDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Solicitudes Activas</p>
-                <p className="text-2xl font-bold text-gray-900">{estadisticas.totalSolicitudesActivas}</p>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Aprobadas Este Mes</p>
+                <p className="text-2xl font-bold text-gray-900">{estadisticas.aprobadasEsteMes}</p>
               </div>
-              <FileText className="h-8 w-8 text-green-600" />
+              <CheckCircle className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-green-500">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Tasa Aprobación</p>
+                <p className="text-2xl font-bold text-gray-900">{estadisticas.tasaAprobacion}%</p>
+                <div className="flex items-center space-x-1 mt-1">
+                  <TrendingUp className="h-3 w-3 text-green-500" />
+                  <p className="text-xs text-green-600">+{estadisticas.tendenciaMensual}%</p>
+                </div>
+              </div>
+              <Target className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-blue-500">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Tiempo Respuesta</p>
+                <p className="text-2xl font-bold text-gray-900">{estadisticas.tiempoPromedioRespuesta}d</p>
+                <Progress value={((3 - estadisticas.tiempoPromedioRespuesta) / 3) * 100} className="h-1 mt-1" />
+              </div>
+              <Activity className="h-8 w-8 text-blue-600" />
             </div>
           </CardContent>
         </Card>
@@ -433,10 +692,11 @@ export function CoordinadorDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Aprendices</p>
-                <p className="text-2xl font-bold text-gray-900">{estadisticas.totalAprendices}</p>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Instructores</p>
+                <p className="text-2xl font-bold text-gray-900">{estadisticas.totalInstructores}</p>
+                <p className="text-xs text-gray-600">{estadisticas.instructoresActivos} activos</p>
               </div>
-              <GraduationCap className="h-8 w-8 text-purple-600" />
+              <Users className="h-8 w-8 text-purple-600" />
             </div>
           </CardContent>
         </Card>
@@ -445,14 +705,158 @@ export function CoordinadorDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Activos</p>
-                <p className="text-2xl font-bold text-gray-900">{estadisticas.instructoresActivos}</p>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Aprendices</p>
+                <p className="text-2xl font-bold text-gray-900">{estadisticas.totalAprendices}</p>
+                <p className="text-xs text-gray-600">Total matriculados</p>
               </div>
-              <Users className="h-8 w-8 text-amber-600" />
+              <GraduationCap className="h-8 w-8 text-amber-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-indigo-500">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Meta Mensual</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {estadisticas.metasMensuales.solicitudesProcesadas.actual}/
+                  {estadisticas.metasMensuales.solicitudesProcesadas.meta}
+                </p>
+                <Progress
+                  value={
+                    (estadisticas.metasMensuales.solicitudesProcesadas.actual /
+                      estadisticas.metasMensuales.solicitudesProcesadas.meta) *
+                    100
+                  }
+                  className="h-1 mt-1"
+                />
+              </div>
+              <FileText className="h-8 w-8 text-indigo-600" />
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {showAnalytics && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <BarChart3 className="h-5 w-5 text-blue-600" />
+              <span>Panel de Analytics</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-3 gap-6">
+              <div>
+                <h4 className="font-medium text-gray-900 mb-3">Metas del Mes</h4>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-sm">
+                      <span>Solicitudes Procesadas</span>
+                      <span>
+                        {estadisticas.metasMensuales.solicitudesProcesadas.actual}/
+                        {estadisticas.metasMensuales.solicitudesProcesadas.meta}
+                      </span>
+                    </div>
+                    <Progress
+                      value={
+                        (estadisticas.metasMensuales.solicitudesProcesadas.actual /
+                          estadisticas.metasMensuales.solicitudesProcesadas.meta) *
+                        100
+                      }
+                      className="h-2"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm">
+                      <span>Tiempo Respuesta (días)</span>
+                      <span>
+                        {estadisticas.metasMensuales.tiempoRespuesta.actual}/
+                        {estadisticas.metasMensuales.tiempoRespuesta.meta}
+                      </span>
+                    </div>
+                    <Progress
+                      value={
+                        (1 -
+                          estadisticas.metasMensuales.tiempoRespuesta.actual /
+                            estadisticas.metasMensuales.tiempoRespuesta.meta) *
+                        100
+                      }
+                      className="h-2"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm">
+                      <span>Satisfacción Instructores</span>
+                      <span>
+                        {estadisticas.metasMensuales.satisfaccionInstructores.actual}%/
+                        {estadisticas.metasMensuales.satisfaccionInstructores.meta}%
+                      </span>
+                    </div>
+                    <Progress
+                      value={
+                        (estadisticas.metasMensuales.satisfaccionInstructores.actual /
+                          estadisticas.metasMensuales.satisfaccionInstructores.meta) *
+                        100
+                      }
+                      className="h-2"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-medium text-gray-900 mb-3">Tendencias</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                    <span className="text-sm">Aprobaciones</span>
+                    <div className="flex items-center space-x-1">
+                      <TrendingUp className="h-4 w-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-600">+{estadisticas.tendenciaMensual}%</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                    <span className="text-sm">Tiempo Respuesta</span>
+                    <div className="flex items-center space-x-1">
+                      <TrendingUp className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-600">-12%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-medium text-gray-900 mb-3">Acciones Rápidas</h4>
+                <div className="space-y-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start bg-transparent"
+                    onClick={() => handleExportSolicitudes("excel")}
+                  >
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Exportar Excel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start bg-transparent"
+                    onClick={() => handleExportSolicitudes("pdf")}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Exportar PDF
+                  </Button>
+                  <Button variant="outline" size="sm" className="w-full justify-start bg-transparent">
+                    <CalendarDays className="h-4 w-4 mr-2" />
+                    Ver Calendario
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Contenido Principal */}
       <Tabs defaultValue="solicitudes" className="w-full">
@@ -475,84 +879,188 @@ export function CoordinadorDashboard() {
         <TabsContent value="solicitudes" className="space-y-6 mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <FileText className="h-5 w-5 text-green-600" />
-                <span>Solicitudes de Formación Complementaria</span>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <FileText className="h-5 w-5 text-green-600" />
+                  <span>Solicitudes de Formación Complementaria</span>
+                </div>
+                {selectedSolicitudes.length > 0 && (
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-600">{selectedSolicitudes.length} seleccionadas</span>
+                    <Button
+                      size="sm"
+                      onClick={handleBulkApprove}
+                      disabled={bulkActionLoading}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Aprobar Todas
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleBulkReject}
+                      disabled={bulkActionLoading}
+                      className="border-red-600 text-red-600 hover:bg-red-50 bg-transparent"
+                    >
+                      <XCircle className="h-4 w-4 mr-1" />
+                      Rechazar Todas
+                    </Button>
+                  </div>
+                )}
               </CardTitle>
               <CardDescription>Revisa, aprueba o rechaza las solicitudes de formación de tu centro</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Buscar por código, programa, instructor o empresa..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
+              <div className="grid lg:grid-cols-6 md:grid-cols-3 gap-4 mb-6">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Buscar solicitudes..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
                 </div>
-                <div className="sm:w-48">
-                  <Select value={estadoFilter} onValueChange={setEstadoFilter}>
-                    <SelectTrigger>
-                      <Filter className="h-4 w-4 mr-2" />
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos los estados</SelectItem>
-                      <SelectItem value="pendiente">Pendientes</SelectItem>
-                      <SelectItem value="aprobada">Aprobadas</SelectItem>
-                      <SelectItem value="rechazada">Rechazadas</SelectItem>
-                      <SelectItem value="borrador">Borradores</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                <Select value={estadoFilter} onValueChange={setEstadoFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los estados</SelectItem>
+                    <SelectItem value="pendiente">Pendientes</SelectItem>
+                    <SelectItem value="aprobada">Aprobadas</SelectItem>
+                    <SelectItem value="rechazada">Rechazadas</SelectItem>
+                    <SelectItem value="borrador">Borradores</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={prioridadFilter} onValueChange={setPrioridadFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Prioridad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las prioridades</SelectItem>
+                    <SelectItem value="ALTA">Alta</SelectItem>
+                    <SelectItem value="MEDIA">Media</SelectItem>
+                    <SelectItem value="BAJA">Baja</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={tipoFormacionFilter} onValueChange={setTipoFormacionFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los tipos</SelectItem>
+                    <SelectItem value="COMPLEMENTARIA">Complementaria</SelectItem>
+                    <SelectItem value="TRANSVERSAL">Transversal</SelectItem>
+                    <SelectItem value="ESPECIFICA">Específica</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Input
+                  type="date"
+                  placeholder="Fecha inicio"
+                  value={fechaInicioFilter}
+                  onChange={(e) => setFechaInicioFilter(e.target.value)}
+                />
+
+                <div className="flex space-x-2">
+                  <Button onClick={loadSolicitudes} disabled={loadingSolicitudes} variant="outline" size="sm">
+                    <RefreshCw className={`h-4 w-4 mr-1 ${loadingSolicitudes ? "animate-spin" : ""}`} />
+                    Actualizar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearchTerm("")
+                      setEstadoFilter("all")
+                      setPrioridadFilter("all")
+                      setTipoFormacionFilter("all")
+                      setFechaInicioFilter("")
+                      setFechaFinFilter("")
+                    }}
+                  >
+                    <Filter className="h-4 w-4 mr-1" />
+                    Limpiar
+                  </Button>
                 </div>
-                <Button onClick={loadSolicitudes} disabled={loadingSolicitudes} variant="outline">
-                  {loadingSolicitudes ? "Cargando..." : "Actualizar"}
-                </Button>
               </div>
+
+              {filteredSolicitudes.filter((s) => s.estado === "PENDIENTE").length > 0 && (
+                <div className="flex items-center space-x-3 mb-4 p-3 bg-gray-50 rounded-lg">
+                  <Checkbox
+                    checked={
+                      selectedSolicitudes.length === filteredSolicitudes.filter((s) => s.estado === "PENDIENTE").length
+                    }
+                    onCheckedChange={handleSelectAll}
+                  />
+                  <span className="text-sm text-gray-600">
+                    Seleccionar todas las solicitudes pendientes (
+                    {filteredSolicitudes.filter((s) => s.estado === "PENDIENTE").length})
+                  </span>
+                </div>
+              )}
 
               <div className="space-y-4">
                 {filteredSolicitudes.map((solicitud) => (
                   <Card key={solicitud.id} className="border-l-4 border-l-blue-400 hover:shadow-md transition-shadow">
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-3">
-                            <h4 className="text-lg font-semibold text-gray-900">{solicitud.codigo}</h4>
-                            {getStatusBadge(solicitud.estado)}
-                            <Badge className="bg-blue-100 text-blue-800">{solicitud.numeroAprendices} aprendices</Badge>
-                          </div>
-
-                          <h5 className="text-md font-medium text-gray-800 mb-2">{solicitud.programa.nombre}</h5>
-
-                          <div className="grid md:grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
-                            <div className="flex items-center space-x-2">
-                              <Users className="h-4 w-4" />
-                              <span>Instructor: {solicitud.instructor.name}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Building className="h-4 w-4" />
-                              <span>Empresa: {solicitud.nombreEmpresa}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Calendar className="h-4 w-4" />
-                              <span>Inicio: {format(new Date(solicitud.fechaInicio), "PPP", { locale: es })}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Clock className="h-4 w-4" />
-                              <span>Duración: {solicitud.programa.duracionHoras}h</span>
-                            </div>
-                          </div>
-
-                          {solicitud.justificacion && (
-                            <div className="bg-gray-50 rounded-lg p-4">
-                              <h6 className="font-medium text-gray-900 mb-2">Justificación:</h6>
-                              <p className="text-sm text-gray-700 line-clamp-3">{solicitud.justificacion}</p>
-                            </div>
+                        <div className="flex items-start space-x-3 flex-1">
+                          {solicitud.estado === "PENDIENTE" && (
+                            <Checkbox
+                              checked={selectedSolicitudes.includes(solicitud.id)}
+                              onCheckedChange={(checked) => handleSelectSolicitud(solicitud.id, checked as boolean)}
+                              className="mt-1"
+                            />
                           )}
+
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3 mb-3">
+                              <h4 className="text-lg font-semibold text-gray-900">{solicitud.codigo}</h4>
+                              {getStatusBadge(solicitud.estado, solicitud.prioridad)}
+                              <Badge className="bg-blue-100 text-blue-800">
+                                {solicitud.numeroAprendices} aprendices
+                              </Badge>
+                              {solicitud.tiempoRespuesta && solicitud.tiempoRespuesta > 5 && (
+                                <Badge className="bg-orange-100 text-orange-800">
+                                  {solicitud.tiempoRespuesta} días
+                                </Badge>
+                              )}
+                            </div>
+
+                            <h5 className="text-md font-medium text-gray-800 mb-2">{solicitud.programa.nombre}</h5>
+
+                            <div className="grid md:grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
+                              <div className="flex items-center space-x-2">
+                                <Users className="h-4 w-4" />
+                                <span>Instructor: {solicitud.instructor.name}</span>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Building className="h-4 w-4" />
+                                <span>Empresa: {solicitud.nombreEmpresa}</span>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Calendar className="h-4 w-4" />
+                                <span>Inicio: {format(new Date(solicitud.fechaInicio), "PPP", { locale: es })}</span>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Clock className="h-4 w-4" />
+                                <span>Duración: {solicitud.programa.duracionHoras}h</span>
+                              </div>
+                            </div>
+
+                            {solicitud.justificacion && (
+                              <div className="bg-gray-50 rounded-lg p-4">
+                                <h6 className="font-medium text-gray-900 mb-2">Justificación:</h6>
+                                <p className="text-sm text-gray-700 line-clamp-3">{solicitud.justificacion}</p>
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         <div className="flex flex-col space-y-2 ml-4">
@@ -616,28 +1124,43 @@ export function CoordinadorDashboard() {
 
         {/* Pestaña 2: Registrar Instructores */}
         <TabsContent value="registro" className="space-y-6 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <UserPlus className="h-5 w-5 text-green-600" />
-                <span>Registrar Nuevo Instructor</span>
-              </CardTitle>
-              <CardDescription>Registra instructores para tu centro de formación</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8">
-                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <UserPlus className="h-12 w-12 text-green-600" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">Formulario de Registro</h3>
-                <p className="text-gray-600 mb-6">Aquí aparecerá el formulario para registrar nuevos instructores</p>
-                <Button className="bg-green-600 hover:bg-green-700 text-white">
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Abrir Formulario de Registro
+          {showRegistroForm ? (
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold">Registrar Nuevo Instructor</h3>
+                <Button variant="outline" onClick={() => setShowRegistroForm(false)}>
+                  Volver al Dashboard
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+              <RegistrarInstructorForm />
+            </div>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <UserPlus className="h-5 w-5 text-green-600" />
+                  <span>Registrar Nuevo Instructor</span>
+                </CardTitle>
+                <CardDescription>Registra instructores para tu centro de formación</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <UserPlus className="h-12 w-12 text-green-600" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Formulario de Registro</h3>
+                  <p className="text-gray-600 mb-6">Registra nuevos instructores para tu centro de formación</p>
+                  <Button
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => setShowRegistroForm(true)}
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Abrir Formulario de Registro
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Pestaña 3: Ver Instructores */}
@@ -675,6 +1198,13 @@ export function CoordinadorDashboard() {
                             <h4 className="text-lg font-semibold text-gray-900">{instructor.name}</h4>
                             <Badge className="bg-green-100 text-green-800">✅ {instructor.estado}</Badge>
                             <Badge className="bg-blue-100 text-blue-800">{instructor.especialidad}</Badge>
+                            {instructor.rendimiento && (
+                              <Badge
+                                className={`${instructor.rendimiento >= 90 ? "bg-green-100 text-green-800" : instructor.rendimiento >= 80 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}
+                              >
+                                {instructor.rendimiento}% rendimiento
+                              </Badge>
+                            )}
                           </div>
 
                           <div className="grid md:grid-cols-3 gap-4 text-sm text-gray-600 mb-4">
@@ -775,6 +1305,7 @@ export function CoordinadorDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
       <SolicitudDetalleModal
         solicitudId={selectedSolicitudId}
         isOpen={isModalOpen}

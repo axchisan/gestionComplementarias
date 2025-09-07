@@ -4,156 +4,99 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Progress } from "@/components/ui/progress"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Users,
-  UserPlus,
-  Search,
-  Eye,
   FileText,
-  GraduationCap,
-  Phone,
-  Mail,
-  Calendar,
-  CheckCircle,
-  XCircle,
-  Clock,
-  Award,
-  Filter,
-  Building,
-  Download,
-  BarChart3,
   TrendingUp,
-  AlertTriangle,
-  RefreshCw,
-  CalendarDays,
-  FileSpreadsheet,
-  Bell,
+  Clock,
+  CheckCircle,
+  BookOpen,
+  User,
+  Building,
   Target,
   Activity,
+  BarChart3,
+  AlertTriangle,
+  GraduationCap,
+  Plus,
+  Eye,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
-import { SolicitudDetalleModal } from "@/components/solicitud-detalle-modal"
-import { RegistrarInstructorForm } from "@/components/registrar-instructor-form"
+import Link from "next/link"
 
-interface Solicitud {
-  id: string
-  codigo: string
-  estado: string
-  fechaInicio: string
-  fechaFin: string
-  numeroAprendices: number
-  nombreEmpresa: string
-  justificacion: string
-  createdAt: string
-  fechaAprobacion?: string
-  prioridad?: "ALTA" | "MEDIA" | "BAJA"
-  tiempoRespuesta?: number // días desde creación
-  instructor: {
-    name: string
-    email: string
-    especialidad?: string
-  }
-  programa: {
-    nombre: string
-    codigo: string
-    duracionHoras: number
-    modalidad: string
-    tipoFormacion: string
-    centro: {
-      nombre: string
-    }
-  }
-  horarios: Array<{
-    id: string
-    diaSemana: string
-    horaInicio: string
-    horaFin: string
-  }>
-}
-
-interface Instructor {
-  id: string
-  name: string
-  email: string
-  cedula: string
-  telefono?: string
-  especialidad?: string
-  fechaIngreso?: string
-  estado: string
-  fichasAsignadas: Array<{
-    numero: string
-    programa: string
-    aprendices: number
-  }>
-  solicitudesFormacion: number
-  horasFormacion: number
-  rendimiento?: number // porcentaje de aprobación
-}
-
-interface EstadisticasAvanzadas {
+interface EstadisticasCoordinador {
+  // Estadísticas principales
+  totalSolicitudes: number
   solicitudesPendientes: number
-  solicitudesEnRevision: number
-  aprobadasEsteMes: number
-  totalInstructores: number
-  instructoresActivos: number
-  totalSolicitudesActivas: number
-  totalAprendices: number
+  solicitudesAprobadas: number
+  solicitudesRechazadas: number
+
+  // Métricas de rendimiento
   tasaAprobacion: number
   tiempoPromedioRespuesta: number
   solicitudesUrgentes: number
-  tendenciaMensual: number
-  metasMensuales: {
-    solicitudesProcesadas: { actual: number; meta: number }
-    tiempoRespuesta: { actual: number; meta: number }
-    satisfaccionInstructores: { actual: number; meta: number }
-  }
+
+  // Gestión de instructores
+  totalInstructores: number
+  instructoresActivos: number
+  instructoresConSolicitudes: number
+
+  // Formación y aprendices
+  totalAprendices: number
+  horasFormacionAprobadas: number
+  programasActivos: number
+
+  // Metas mensuales
+  metaMensualSolicitudes: number
+  solicitudesProcesadasMes: number
+  metaTiempoRespuesta: number
+}
+
+interface SolicitudReciente {
+  id: string
+  codigo: string
+  instructor: string
+  programa: string
+  estado: string
+  fechaSolicitud: string
+  prioridad: "ALTA" | "MEDIA" | "BAJA"
+}
+
+interface InstructorResumen {
+  id: string
+  name: string
+  email: string
+  solicitudesActivas: number
+  horasFormacion: number
+  ultimaActividad: string
 }
 
 export function CoordinadorDashboard() {
   const { user, token } = useAuth()
-  const [searchTerm, setSearchTerm] = useState("")
-  const [estadoFilter, setEstadoFilter] = useState("all")
-  const [fechaInicioFilter, setFechaInicioFilter] = useState("")
-  const [fechaFinFilter, setFechaFinFilter] = useState("")
-  const [tipoFormacionFilter, setTipoFormacionFilter] = useState("all")
-  const [prioridadFilter, setPrioridadFilter] = useState("all")
   const [loading, setLoading] = useState(true)
-  const [loadingSolicitudes, setLoadingSolicitudes] = useState(false)
-  const [selectedSolicitudId, setSelectedSolicitudId] = useState<string | null>(null)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [showRegistroForm, setShowRegistroForm] = useState(false)
-
-  const [selectedSolicitudes, setSelectedSolicitudes] = useState<string[]>([])
-  const [bulkActionLoading, setBulkActionLoading] = useState(false)
-  const [showAnalytics, setShowAnalytics] = useState(false)
-
-  const [solicitudes, setSolicitudes] = useState<Solicitud[]>([])
-  const [instructores, setInstructores] = useState<Instructor[]>([])
-  const [estadisticas, setEstadisticas] = useState<EstadisticasAvanzadas>({
+  const [estadisticas, setEstadisticas] = useState<EstadisticasCoordinador>({
+    totalSolicitudes: 0,
     solicitudesPendientes: 0,
-    solicitudesEnRevision: 0,
-    aprobadasEsteMes: 0,
-    totalInstructores: 0,
-    instructoresActivos: 0,
-    totalSolicitudesActivas: 0,
-    totalAprendices: 0,
+    solicitudesAprobadas: 0,
+    solicitudesRechazadas: 0,
     tasaAprobacion: 0,
     tiempoPromedioRespuesta: 0,
     solicitudesUrgentes: 0,
-    tendenciaMensual: 0,
-    metasMensuales: {
-      solicitudesProcesadas: { actual: 0, meta: 50 },
-      tiempoRespuesta: { actual: 0, meta: 3 },
-      satisfaccionInstructores: { actual: 0, meta: 90 },
-    },
+    totalInstructores: 0,
+    instructoresActivos: 0,
+    instructoresConSolicitudes: 0,
+    totalAprendices: 0,
+    horasFormacionAprobadas: 0,
+    programasActivos: 0,
+    metaMensualSolicitudes: 50,
+    solicitudesProcesadasMes: 0,
+    metaTiempoRespuesta: 3,
   })
+
+  const [solicitudesRecientes, setSolicitudesRecientes] = useState<SolicitudReciente[]>([])
+  const [instructoresResumen, setInstructoresResumen] = useState<InstructorResumen[]>([])
 
   useEffect(() => {
     if (user && token) {
@@ -164,7 +107,7 @@ export function CoordinadorDashboard() {
   const loadDashboardData = async () => {
     setLoading(true)
     try {
-      await Promise.all([loadSolicitudes(), loadInstructores(), loadAnalytics()])
+      await Promise.all([loadEstadisticas(), loadSolicitudesRecientes(), loadInstructoresResumen()])
     } catch (error) {
       console.error("Error loading dashboard data:", error)
     } finally {
@@ -172,361 +115,156 @@ export function CoordinadorDashboard() {
     }
   }
 
-  const loadSolicitudes = async () => {
-    if (!token) return
-
-    setLoadingSolicitudes(true)
+  const loadEstadisticas = async () => {
     try {
-      let url = `/api/solicitudes?limit=100`
+      // Load solicitudes statistics
+      const solicitudesResponse = await fetch("/api/solicitudes?limit=1000", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
 
-      if (estadoFilter !== "all") url += `&estado=${estadoFilter}`
-      if (tipoFormacionFilter !== "all") url += `&tipoFormacion=${tipoFormacionFilter}`
-      if (fechaInicioFilter) url += `&fechaInicio=${fechaInicioFilter}`
-      if (fechaFinFilter) url += `&fechaFin=${fechaFinFilter}`
+      if (solicitudesResponse.ok) {
+        const data = await solicitudesResponse.json()
+        const solicitudes = data.solicitudes || []
 
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        // Calculate statistics
+        const pendientes = solicitudes.filter((s: any) => s.estado === "PENDIENTE").length
+        const aprobadas = solicitudes.filter((s: any) => s.estado === "APROBADA").length
+        const rechazadas = solicitudes.filter((s: any) => s.estado === "RECHAZADA").length
+
+        // Calculate this month's processed requests
+        const thisMonth = new Date()
+        thisMonth.setDate(1)
+        const procesadasMes = solicitudes.filter(
+          (s: any) => (s.estado === "APROBADA" || s.estado === "RECHAZADA") && new Date(s.updatedAt) >= thisMonth,
+        ).length
+
+        // Calculate urgent requests (older than 7 days)
+        const urgentes = solicitudes.filter((s: any) => {
+          if (s.estado !== "PENDIENTE") return false
+          const daysSince = Math.floor((Date.now() - new Date(s.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+          return daysSince > 7
+        }).length
+
+        // Calculate average response time
+        const processedRequests = solicitudes.filter((s: any) => s.estado === "APROBADA" || s.estado === "RECHAZADA")
+        const avgResponseTime =
+          processedRequests.length > 0
+            ? processedRequests.reduce((sum: number, s: any) => {
+                const responseTime = Math.floor(
+                  (new Date(s.updatedAt).getTime() - new Date(s.createdAt).getTime()) / (1000 * 60 * 60 * 24),
+                )
+                return sum + responseTime
+              }, 0) / processedRequests.length
+            : 0
+
+        const tasaAprobacion = solicitudes.length > 0 ? (aprobadas / solicitudes.length) * 100 : 0
+
+        setEstadisticas((prev) => ({
+          ...prev,
+          totalSolicitudes: solicitudes.length,
+          solicitudesPendientes: pendientes,
+          solicitudesAprobadas: aprobadas,
+          solicitudesRechazadas: rechazadas,
+          tasaAprobacion: Math.round(tasaAprobacion),
+          tiempoPromedioRespuesta: Math.round(avgResponseTime),
+          solicitudesUrgentes: urgentes,
+          solicitudesProcesadasMes: procesadasMes,
+          horasFormacionAprobadas: solicitudes
+            .filter((s: any) => s.estado === "APROBADA")
+            .reduce((sum: number, s: any) => sum + (s.programa?.duracionHoras || 0), 0),
+          totalAprendices: solicitudes
+            .filter((s: any) => s.estado === "APROBADA")
+            .reduce((sum: number, s: any) => sum + (s.numeroAprendicesInscribir || 0), 0),
+        }))
+      }
+
+      // Load instructors statistics
+      const instructoresResponse = await fetch("/api/instructores", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (instructoresResponse.ok) {
+        const data = await instructoresResponse.json()
+        const instructores = data.instructores || []
+
+        setEstadisticas((prev) => ({
+          ...prev,
+          totalInstructores: instructores.length,
+          instructoresActivos: instructores.filter((i: any) => i.isActive).length,
+          instructoresConSolicitudes: instructores.filter((i: any) => i.solicitudesFormacion > 0).length,
+        }))
+      }
+    } catch (error) {
+      console.error("Error loading statistics:", error)
+    }
+  }
+
+  const loadSolicitudesRecientes = async () => {
+    try {
+      const response = await fetch("/api/solicitudes?limit=5&orderBy=createdAt&order=desc", {
+        headers: { Authorization: `Bearer ${token}` },
       })
 
       if (response.ok) {
         const data = await response.json()
-        const solicitudesConPrioridad =
-          data.solicitudes?.map((s: Solicitud) => ({
-            ...s,
-            prioridad: calcularPrioridad(s),
-            tiempoRespuesta: calcularTiempoRespuesta(s.createdAt),
-          })) || []
+        const solicitudes = data.solicitudes || []
 
-        setSolicitudes(solicitudesConPrioridad)
-        calcularEstadisticas(solicitudesConPrioridad)
+        const recientes = solicitudes.map((s: any) => ({
+          id: s.id,
+          codigo: s.codigo,
+          instructor: s.instructor?.name || "N/A",
+          programa: s.programa?.nombre || "N/A",
+          estado: s.estado,
+          fechaSolicitud: s.createdAt,
+          prioridad: calcularPrioridad(s.createdAt, s.estado),
+        }))
+
+        setSolicitudesRecientes(recientes)
       }
     } catch (error) {
-      console.error("Error loading solicitudes:", error)
-    } finally {
-      setLoadingSolicitudes(false)
+      console.error("Error loading recent requests:", error)
     }
   }
 
-  const calcularPrioridad = (solicitud: Solicitud): "ALTA" | "MEDIA" | "BAJA" => {
-    const diasDesdeCreacion = calcularTiempoRespuesta(solicitud.createdAt)
-    const esComplementaria = solicitud.programa.tipoFormacion === "COMPLEMENTARIA"
-    const muchoAprendices = solicitud.numeroAprendices > 25
+  const loadInstructoresResumen = async () => {
+    try {
+      const response = await fetch("/api/instructores?limit=5", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
 
-    if (diasDesdeCreacion > 7 || (esComplementaria && muchoAprendices)) return "ALTA"
-    if (diasDesdeCreacion > 3 || muchoAprendices) return "MEDIA"
+      if (response.ok) {
+        const data = await response.json()
+        const instructores = data.instructores || []
+
+        const resumen = instructores.map((i: any) => ({
+          id: i.id,
+          name: i.name,
+          email: i.email,
+          solicitudesActivas: i.solicitudesFormacion || 0,
+          horasFormacion: i.horasFormacion || 0,
+          ultimaActividad: i.updatedAt,
+        }))
+
+        setInstructoresResumen(resumen)
+      }
+    } catch (error) {
+      console.error("Error loading instructors summary:", error)
+    }
+  }
+
+  const calcularPrioridad = (fechaCreacion: string, estado: string): "ALTA" | "MEDIA" | "BAJA" => {
+    if (estado !== "PENDIENTE") return "BAJA"
+
+    const diasDesdeCreacion = Math.floor((Date.now() - new Date(fechaCreacion).getTime()) / (1000 * 60 * 60 * 24))
+
+    if (diasDesdeCreacion > 7) return "ALTA"
+    if (diasDesdeCreacion > 3) return "MEDIA"
     return "BAJA"
   }
 
-  const calcularTiempoRespuesta = (fechaCreacion: string): number => {
-    const ahora = new Date()
-    const creacion = new Date(fechaCreacion)
-    return Math.floor((ahora.getTime() - creacion.getTime()) / (1000 * 60 * 60 * 24))
-  }
-
-  const calcularEstadisticas = (solicitudesData: Solicitud[]) => {
-    const pendientes = solicitudesData.filter((s) => s.estado === "PENDIENTE").length
-    const enRevision = solicitudesData.filter((s) => s.estado === "EN_REVISION").length
-    const aprobadas = solicitudesData.filter((s) => s.estado === "APROBADA").length
-
-    // Calculate approved this month
-    const thisMonth = new Date()
-    thisMonth.setDate(1)
-    const aprobadasEsteMes = solicitudesData.filter(
-      (s) => s.estado === "APROBADA" && s.fechaAprobacion && new Date(s.fechaAprobacion) >= thisMonth,
-    ).length
-
-    const total = solicitudesData.length
-    const urgentes = solicitudesData.filter((s) => s.prioridad === "ALTA").length
-    const tiempoPromedio = solicitudesData.reduce((sum, s) => sum + (s.tiempoRespuesta || 0), 0) / total || 0
-    const tasaAprobacion = total > 0 ? (aprobadas / total) * 100 : 0
-
-    setEstadisticas((prev) => ({
-      ...prev,
-      solicitudesPendientes: pendientes,
-      solicitudesEnRevision: enRevision,
-      aprobadasEsteMes: aprobadasEsteMes,
-      solicitudesUrgentes: urgentes,
-      tasaAprobacion: Math.round(tasaAprobacion),
-      tiempoPromedioRespuesta: Math.round(tiempoPromedio),
-      metasMensuales: {
-        ...prev.metasMensuales,
-        solicitudesProcesadas: { ...prev.metasMensuales.solicitudesProcesadas, actual: aprobadasEsteMes },
-        tiempoRespuesta: { ...prev.metasMensuales.tiempoRespuesta, actual: Math.round(tiempoPromedio) },
-      },
-    }))
-  }
-
-  const loadAnalytics = async () => {
-    setEstadisticas((prev) => ({
-      ...prev,
-      tendenciaMensual: 15, // 15% de incremento
-      metasMensuales: {
-        solicitudesProcesadas: { actual: 42, meta: 50 },
-        tiempoRespuesta: { actual: 2.5, meta: 3 },
-        satisfaccionInstructores: { actual: 87, meta: 90 },
-      },
-    }))
-  }
-
-  const loadInstructores = async () => {
-    if (!token) return
-
-    try {
-      const response = await fetch("/api/instructores", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const instructoresData = data.instructores || []
-
-        setInstructores(instructoresData)
-        setEstadisticas((prev) => ({
-          ...prev,
-          totalInstructores: instructoresData.length,
-          instructoresActivos: instructoresData.filter((i: any) => i.isActive).length,
-          totalAprendices: instructoresData.reduce(
-            (sum: number, i: any) => sum + (i.estadisticas?.totalAprendices || 0),
-            0,
-          ),
-        }))
-      } else {
-        console.error("Error fetching instructores:", response.statusText)
-      }
-    } catch (error) {
-      console.error("Error loading instructores:", error)
-      // Fallback to empty array on error
-      setInstructores([])
-    }
-  }
-
-  const filteredSolicitudes = solicitudes.filter((solicitud) => {
-    const matchesSearch =
-      solicitud.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      solicitud.programa.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      solicitud.instructor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      solicitud.nombreEmpresa.toLowerCase().includes(searchTerm.toLowerCase())
-
-    const matchesStatus = estadoFilter === "all" || solicitud.estado === estadoFilter.toUpperCase()
-    const matchesTipo = tipoFormacionFilter === "all" || solicitud.programa.tipoFormacion === tipoFormacionFilter
-    const matchesPrioridad = prioridadFilter === "all" || solicitud.prioridad === prioridadFilter
-
-    return matchesSearch && matchesStatus && matchesTipo && matchesPrioridad
-  })
-
-  const handleSelectSolicitud = (solicitudId: string, checked: boolean) => {
-    if (checked) {
-      setSelectedSolicitudes((prev) => [...prev, solicitudId])
-    } else {
-      setSelectedSolicitudes((prev) => prev.filter((id) => id !== solicitudId))
-    }
-  }
-
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      const pendientes = filteredSolicitudes.filter((s) => s.estado === "PENDIENTE").map((s) => s.id)
-      setSelectedSolicitudes(pendientes)
-    } else {
-      setSelectedSolicitudes([])
-    }
-  }
-
-  const handleBulkApprove = async () => {
-    if (selectedSolicitudes.length === 0) return
-
-    setBulkActionLoading(true)
-    try {
-      const comentarios = prompt("Comentarios para la aprobación en lote (opcional):")
-
-      const promises = selectedSolicitudes.map((id) =>
-        fetch(`/api/solicitudes/${id}/approve`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ comentarios }),
-        }),
-      )
-
-      await Promise.all(promises)
-      await loadSolicitudes()
-      setSelectedSolicitudes([])
-      alert(`${selectedSolicitudes.length} solicitudes aprobadas exitosamente`)
-    } catch (error) {
-      console.error("Error en aprobación en lote:", error)
-      alert("Error en la aprobación en lote")
-    } finally {
-      setBulkActionLoading(false)
-    }
-  }
-
-  const handleBulkReject = async () => {
-    if (selectedSolicitudes.length === 0) return
-
-    setBulkActionLoading(true)
-    try {
-      const comentarios = prompt("Comentarios para el rechazo en lote (requerido):")
-      if (!comentarios) return
-
-      const promises = selectedSolicitudes.map((id) =>
-        fetch(`/api/solicitudes/${id}/reject`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ comentarios }),
-        }),
-      )
-
-      await Promise.all(promises)
-      await loadSolicitudes()
-      setSelectedSolicitudes([])
-      alert(`${selectedSolicitudes.length} solicitudes rechazadas`)
-    } catch (error) {
-      console.error("Error en rechazo en lote:", error)
-      alert("Error en el rechazo en lote")
-    } finally {
-      setBulkActionLoading(false)
-    }
-  }
-
-  const handleExportSolicitudes = async (format: "pdf" | "excel") => {
-    try {
-      let url = `/api/solicitudes/export-all?format=${format}`
-      if (estadoFilter !== "all") url += `&estado=${estadoFilter}`
-      if (fechaInicioFilter) url += `&fechaInicio=${fechaInicioFilter}`
-      if (fechaFinFilter) url += `&fechaFin=${fechaFinFilter}`
-
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (response.ok) {
-        const blob = await response.blob()
-        const url2 = window.URL.createObjectURL(blob)
-        const a = document.createElement("a")
-        a.href = url2
-        a.download = `solicitudes-${format === "pdf" ? "reporte" : "datos"}.${format === "pdf" ? "pdf" : "xlsx"}`
-        a.click()
-        window.URL.revokeObjectURL(url2)
-      }
-    } catch (error) {
-      console.error(`Error exportando ${format}:`, error)
-    }
-  }
-
-  const handleAprobarSolicitud = async (solicitudId: string) => {
-    if (!token) return
-
-    const comentarios = prompt("Ingrese comentarios adicionales para la aprobación (opcional):")
-
-    try {
-      const response = await fetch(`/api/solicitudes/${solicitudId}/approve`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ comentarios }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        await loadSolicitudes() // Reload data
-        alert(`Solicitud aprobada exitosamente. Número de ficha asignado: ${data.solicitud.numeroFicha}`)
-      } else {
-        const errorData = await response.json()
-        alert(`Error: ${errorData.error}`)
-      }
-    } catch (error) {
-      console.error("Error approving solicitud:", error)
-      alert("Error al aprobar la solicitud")
-    }
-  }
-
-  const handleRechazarSolicitud = async (solicitudId: string) => {
-    if (!token) return
-
-    const comentarios = prompt("Ingrese los comentarios para el rechazo (opcional):")
-
-    try {
-      const response = await fetch(`/api/solicitudes/${solicitudId}/reject`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ comentarios }),
-      })
-
-      if (response.ok) {
-        await loadSolicitudes() // Reload data
-        alert("Solicitud rechazada exitosamente")
-      } else {
-        const errorData = await response.json()
-        alert(`Error: ${errorData.error}`)
-      }
-    } catch (error) {
-      console.error("Error rejecting solicitud:", error)
-      alert("Error al rechazar la solicitud")
-    }
-  }
-
-  const handleVerDetalles = (solicitudId: string) => {
-    setSelectedSolicitudId(solicitudId)
-    setIsModalOpen(true)
-  }
-
-  const handleCloseModal = () => {
-    setSelectedSolicitudId(null)
-    setIsModalOpen(false)
-  }
-
-  const handleModalApprove = async (id: string, comentarios: string) => {
-    const response = await fetch(`/api/solicitudes/${id}/approve`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ comentarios }),
-    })
-
-    if (response.ok) {
-      const data = await response.json()
-      await loadSolicitudes()
-      alert(`Solicitud aprobada exitosamente. Número de ficha asignado: ${data.solicitud.numeroFicha}`)
-    } else {
-      const errorData = await response.json()
-      alert(`Error: ${errorData.error}`)
-    }
-  }
-
-  const handleModalReject = async (id: string, comentarios: string) => {
-    const response = await fetch(`/api/solicitudes/${id}/reject`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ comentarios }),
-    })
-
-    if (response.ok) {
-      await loadSolicitudes()
-      alert("Solicitud rechazada exitosamente")
-    } else {
-      const errorData = await response.json()
-      alert(`Error: ${errorData.error}`)
-    }
+  const getProgressPercentage = () => {
+    if (estadisticas.metaMensualSolicitudes === 0) return 0
+    return Math.min((estadisticas.solicitudesProcesadasMes / estadisticas.metaMensualSolicitudes) * 100, 100)
   }
 
   const getStatusBadge = (estado: string, prioridad?: string) => {
@@ -537,7 +275,7 @@ export function CoordinadorDashboard() {
         return (
           <Badge className={`${prioridad === "ALTA" ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800"}`}>
             {priorityIcon || <Clock className="h-3 w-3 mr-1" />}
-            Pendiente {prioridad === "ALTA" ? "(Urgente)" : ""}
+            Pendiente
           </Badge>
         )
       case "APROBADA":
@@ -548,77 +286,101 @@ export function CoordinadorDashboard() {
           </Badge>
         )
       case "RECHAZADA":
-        return (
-          <Badge className="bg-red-100 text-red-800">
-            <XCircle className="h-3 w-3 mr-1" />
-            Rechazada
-          </Badge>
-        )
-      case "BORRADOR":
-        return <Badge className="bg-gray-100 text-gray-800">Borrador</Badge>
-      case "EN_CURSO":
-        return <Badge className="bg-blue-100 text-blue-800">En Curso</Badge>
-      case "EN_REVISION":
-        return <Badge className="bg-orange-100 text-orange-800">En Revisión</Badge>
+        return <Badge className="bg-red-100 text-red-800">Rechazada</Badge>
       default:
         return <Badge variant="outline">{estado}</Badge>
     }
   }
 
-  const filteredInstructores = instructores.filter(
-    (instructor) =>
-      instructor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      instructor.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      instructor.cedula.includes(searchTerm) ||
-      (instructor.especialidad && instructor.especialidad.toLowerCase().includes(searchTerm.toLowerCase())),
-  )
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
-        <p className="ml-3 text-gray-600">Cargando dashboard...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando dashboard...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header de Bienvenida */}
-      <Card className="bg-gradient-to-r from-green-50 to-green-100 border-green-200">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">¡Bienvenido, {user?.name}!</h2>
-              <div className="flex items-center space-x-2 mt-1">
-                <Building className="h-4 w-4 text-gray-600" />
-                <p className="text-gray-600">{user?.centro?.nombre}</p>
+      <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <Card className="bg-gradient-to-r from-green-50 to-green-100 border-green-200 h-full">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between h-full">
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-bold text-gray-900">¡Bienvenido, {user?.name}!</h2>
+                  <div className="flex items-center space-x-2">
+                    <Building className="h-4 w-4 text-gray-600" />
+                    <p className="text-gray-600">{user?.centro?.nombre}</p>
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    Panel ejecutivo para la gestión integral de formación complementaria
+                  </p>
+                  <div className="flex items-center space-x-4 pt-2">
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <TrendingUp className="h-4 w-4 text-green-600" />
+                      <span>Meta mensual: {getProgressPercentage().toFixed(0)}% completada</span>
+                    </div>
+                    {estadisticas.solicitudesUrgentes > 0 && (
+                      <div className="flex items-center space-x-2 text-sm text-red-600">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span>{estadisticas.solicitudesUrgentes} solicitudes urgentes</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right space-y-2">
+                  <Button asChild className="bg-green-600 hover:bg-green-700 text-white">
+                    <Link href="/solicitudes-pendientes">
+                      <Eye className="h-4 w-4 mr-2" />
+                      Gestionar Solicitudes
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href="/crear-usuario">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Registrar Instructor
+                    </Link>
+                  </Button>
+                </div>
               </div>
-              <p className="text-sm text-gray-500 mt-1">
-                Gestiona las solicitudes de formación complementaria e instructores de tu centro
-              </p>
-            </div>
-            <div className="flex items-center space-x-3">
-              <Button variant="outline" size="sm" onClick={() => setShowAnalytics(!showAnalytics)}>
-                <BarChart3 className="h-4 w-4 mr-2" />
-                Analytics
-              </Button>
-              <Button variant="outline" size="sm">
-                <Bell className="h-4 w-4 mr-2" />
-                Notificaciones
-                {estadisticas.solicitudesUrgentes > 0 && (
-                  <Badge className="ml-2 bg-red-500 text-white">{estadisticas.solicitudesUrgentes}</Badge>
-                )}
-              </Button>
-              <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => setShowRegistroForm(true)}>
-                <UserPlus className="h-4 w-4 mr-2" />
-                Registrar Instructor
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </div>
 
+        {/* Progreso Mensual */}
+        <Card className="border-l-4 border-l-green-500">
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">Meta Mensual</h3>
+                <Target className="h-5 w-5 text-green-600" />
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Solicitudes Procesadas</span>
+                    <span className="font-medium">
+                      {estadisticas.solicitudesProcesadasMes}/{estadisticas.metaMensualSolicitudes}
+                    </span>
+                  </div>
+                  <Progress value={getProgressPercentage()} className="h-2" />
+                </div>
+                <div className="text-sm text-gray-600">
+                  <p>Tiempo promedio: {estadisticas.tiempoPromedioRespuesta}d</p>
+                  <p>Tasa de aprobación: {estadisticas.tasaAprobacion}%</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Estadísticas Principales */}
       <div className="grid lg:grid-cols-6 md:grid-cols-3 gap-4">
         <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-red-500">
           <CardContent className="p-4">
@@ -635,55 +397,28 @@ export function CoordinadorDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-blue-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">En Revisión</p>
-                <p className="text-2xl font-bold text-gray-900">{estadisticas.solicitudesEnRevision}</p>
-              </div>
-              <Eye className="h-8 w-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-
         <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-green-500">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Aprobadas Este Mes</p>
-                <p className="text-2xl font-bold text-gray-900">{estadisticas.aprobadasEsteMes}</p>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Aprobadas</p>
+                <p className="text-2xl font-bold text-gray-900">{estadisticas.solicitudesAprobadas}</p>
+                <p className="text-xs text-green-600">Tasa: {estadisticas.tasaAprobacion}%</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-600" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-green-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Tasa Aprobación</p>
-                <p className="text-2xl font-bold text-gray-900">{estadisticas.tasaAprobacion}%</p>
-                <div className="flex items-center space-x-1 mt-1">
-                  <TrendingUp className="h-3 w-3 text-green-500" />
-                  <p className="text-xs text-green-600">+{estadisticas.tendenciaMensual}%</p>
-                </div>
-              </div>
-              <Target className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-
         <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-blue-500">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Tiempo Respuesta</p>
-                <p className="text-2xl font-bold text-gray-900">{estadisticas.tiempoPromedioRespuesta}d</p>
-                <Progress value={((3 - estadisticas.tiempoPromedioRespuesta) / 3) * 100} className="h-1 mt-1" />
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total</p>
+                <p className="text-2xl font-bold text-gray-900">{estadisticas.totalSolicitudes}</p>
+                <p className="text-xs text-gray-600">Solicitudes</p>
               </div>
-              <Activity className="h-8 w-8 text-blue-600" />
+              <FileText className="h-8 w-8 text-blue-600" />
             </div>
           </CardContent>
         </Card>
@@ -694,7 +429,7 @@ export function CoordinadorDashboard() {
               <div>
                 <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Instructores</p>
                 <p className="text-2xl font-bold text-gray-900">{estadisticas.totalInstructores}</p>
-                <p className="text-xs text-gray-600">{estadisticas.instructoresActivos} activos</p>
+                <p className="text-xs text-purple-600">{estadisticas.instructoresActivos} activos</p>
               </div>
               <Users className="h-8 w-8 text-purple-600" />
             </div>
@@ -707,7 +442,7 @@ export function CoordinadorDashboard() {
               <div>
                 <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Aprendices</p>
                 <p className="text-2xl font-bold text-gray-900">{estadisticas.totalAprendices}</p>
-                <p className="text-xs text-gray-600">Total matriculados</p>
+                <p className="text-xs text-amber-600">Matriculados</p>
               </div>
               <GraduationCap className="h-8 w-8 text-amber-600" />
             </div>
@@ -718,602 +453,324 @@ export function CoordinadorDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Meta Mensual</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {estadisticas.metasMensuales.solicitudesProcesadas.actual}/
-                  {estadisticas.metasMensuales.solicitudesProcesadas.meta}
-                </p>
-                <Progress
-                  value={
-                    (estadisticas.metasMensuales.solicitudesProcesadas.actual /
-                      estadisticas.metasMensuales.solicitudesProcesadas.meta) *
-                    100
-                  }
-                  className="h-1 mt-1"
-                />
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Horas</p>
+                <p className="text-2xl font-bold text-gray-900">{estadisticas.horasFormacionAprobadas}</p>
+                <p className="text-xs text-indigo-600">Formación</p>
               </div>
-              <FileText className="h-8 w-8 text-indigo-600" />
+              <BookOpen className="h-8 w-8 text-indigo-600" />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {showAnalytics && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <BarChart3 className="h-5 w-5 text-blue-600" />
-              <span>Panel de Analytics</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-3 gap-6">
-              <div>
-                <h4 className="font-medium text-gray-900 mb-3">Metas del Mes</h4>
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between text-sm">
-                      <span>Solicitudes Procesadas</span>
-                      <span>
-                        {estadisticas.metasMensuales.solicitudesProcesadas.actual}/
-                        {estadisticas.metasMensuales.solicitudesProcesadas.meta}
-                      </span>
-                    </div>
-                    <Progress
-                      value={
-                        (estadisticas.metasMensuales.solicitudesProcesadas.actual /
-                          estadisticas.metasMensuales.solicitudesProcesadas.meta) *
-                        100
-                      }
-                      className="h-2"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm">
-                      <span>Tiempo Respuesta (días)</span>
-                      <span>
-                        {estadisticas.metasMensuales.tiempoRespuesta.actual}/
-                        {estadisticas.metasMensuales.tiempoRespuesta.meta}
-                      </span>
-                    </div>
-                    <Progress
-                      value={
-                        (1 -
-                          estadisticas.metasMensuales.tiempoRespuesta.actual /
-                            estadisticas.metasMensuales.tiempoRespuesta.meta) *
-                        100
-                      }
-                      className="h-2"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm">
-                      <span>Satisfacción Instructores</span>
-                      <span>
-                        {estadisticas.metasMensuales.satisfaccionInstructores.actual}%/
-                        {estadisticas.metasMensuales.satisfaccionInstructores.meta}%
-                      </span>
-                    </div>
-                    <Progress
-                      value={
-                        (estadisticas.metasMensuales.satisfaccionInstructores.actual /
-                          estadisticas.metasMensuales.satisfaccionInstructores.meta) *
-                        100
-                      }
-                      className="h-2"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-medium text-gray-900 mb-3">Tendencias</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                    <span className="text-sm">Aprobaciones</span>
-                    <div className="flex items-center space-x-1">
-                      <TrendingUp className="h-4 w-4 text-green-600" />
-                      <span className="text-sm font-medium text-green-600">+{estadisticas.tendenciaMensual}%</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                    <span className="text-sm">Tiempo Respuesta</span>
-                    <div className="flex items-center space-x-1">
-                      <TrendingUp className="h-4 w-4 text-blue-600" />
-                      <span className="text-sm font-medium text-blue-600">-12%</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-medium text-gray-900 mb-3">Acciones Rápidas</h4>
-                <div className="space-y-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-start bg-transparent"
-                    onClick={() => handleExportSolicitudes("excel")}
-                  >
-                    <FileSpreadsheet className="h-4 w-4 mr-2" />
-                    Exportar Excel
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-start bg-transparent"
-                    onClick={() => handleExportSolicitudes("pdf")}
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Exportar PDF
-                  </Button>
-                  <Button variant="outline" size="sm" className="w-full justify-start bg-transparent">
-                    <CalendarDays className="h-4 w-4 mr-2" />
-                    Ver Calendario
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Contenido Principal */}
-      <Tabs defaultValue="solicitudes" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 h-12">
+      {/* Contenido Principal con Tabs */}
+      <Tabs defaultValue="resumen" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 h-12">
+          <TabsTrigger value="resumen" className="flex items-center space-x-2">
+            <BarChart3 className="h-4 w-4" />
+            <span>Resumen Ejecutivo</span>
+          </TabsTrigger>
           <TabsTrigger value="solicitudes" className="flex items-center space-x-2">
             <FileText className="h-4 w-4" />
-            <span>Gestionar Solicitudes</span>
-          </TabsTrigger>
-          <TabsTrigger value="registro" className="flex items-center space-x-2">
-            <UserPlus className="h-4 w-4" />
-            <span>Registrar Instructores</span>
+            <span>Solicitudes Recientes</span>
           </TabsTrigger>
           <TabsTrigger value="instructores" className="flex items-center space-x-2">
             <Users className="h-4 w-4" />
-            <span>Ver Instructores</span>
+            <span>Mis Instructores</span>
+          </TabsTrigger>
+          <TabsTrigger value="perfil" className="flex items-center space-x-2">
+            <User className="h-4 w-4" />
+            <span>Mi Perfil</span>
           </TabsTrigger>
         </TabsList>
 
-        {/* Pestaña 1: Gestionar Solicitudes */}
-        <TabsContent value="solicitudes" className="space-y-6 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <FileText className="h-5 w-5 text-green-600" />
-                  <span>Solicitudes de Formación Complementaria</span>
-                </div>
-                {selectedSolicitudes.length > 0 && (
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-600">{selectedSolicitudes.length} seleccionadas</span>
-                    <Button
-                      size="sm"
-                      onClick={handleBulkApprove}
-                      disabled={bulkActionLoading}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <CheckCircle className="h-4 w-4 mr-1" />
-                      Aprobar Todas
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleBulkReject}
-                      disabled={bulkActionLoading}
-                      className="border-red-600 text-red-600 hover:bg-red-50 bg-transparent"
-                    >
-                      <XCircle className="h-4 w-4 mr-1" />
-                      Rechazar Todas
-                    </Button>
-                  </div>
-                )}
-              </CardTitle>
-              <CardDescription>Revisa, aprueba o rechaza las solicitudes de formación de tu centro</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid lg:grid-cols-6 md:grid-cols-3 gap-4 mb-6">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Buscar solicitudes..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-
-                <Select value={estadoFilter} onValueChange={setEstadoFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Estado" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los estados</SelectItem>
-                    <SelectItem value="pendiente">Pendientes</SelectItem>
-                    <SelectItem value="aprobada">Aprobadas</SelectItem>
-                    <SelectItem value="rechazada">Rechazadas</SelectItem>
-                    <SelectItem value="borrador">Borradores</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={prioridadFilter} onValueChange={setPrioridadFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Prioridad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las prioridades</SelectItem>
-                    <SelectItem value="ALTA">Alta</SelectItem>
-                    <SelectItem value="MEDIA">Media</SelectItem>
-                    <SelectItem value="BAJA">Baja</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={tipoFormacionFilter} onValueChange={setTipoFormacionFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los tipos</SelectItem>
-                    <SelectItem value="COMPLEMENTARIA">Complementaria</SelectItem>
-                    <SelectItem value="TRANSVERSAL">Transversal</SelectItem>
-                    <SelectItem value="ESPECIFICA">Específica</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Input
-                  type="date"
-                  placeholder="Fecha inicio"
-                  value={fechaInicioFilter}
-                  onChange={(e) => setFechaInicioFilter(e.target.value)}
-                />
-
-                <div className="flex space-x-2">
-                  <Button onClick={loadSolicitudes} disabled={loadingSolicitudes} variant="outline" size="sm">
-                    <RefreshCw className={`h-4 w-4 mr-1 ${loadingSolicitudes ? "animate-spin" : ""}`} />
-                    Actualizar
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSearchTerm("")
-                      setEstadoFilter("all")
-                      setPrioridadFilter("all")
-                      setTipoFormacionFilter("all")
-                      setFechaInicioFilter("")
-                      setFechaFinFilter("")
-                    }}
-                  >
-                    <Filter className="h-4 w-4 mr-1" />
-                    Limpiar
-                  </Button>
-                </div>
-              </div>
-
-              {filteredSolicitudes.filter((s) => s.estado === "PENDIENTE").length > 0 && (
-                <div className="flex items-center space-x-3 mb-4 p-3 bg-gray-50 rounded-lg">
-                  <Checkbox
-                    checked={
-                      selectedSolicitudes.length === filteredSolicitudes.filter((s) => s.estado === "PENDIENTE").length
-                    }
-                    onCheckedChange={handleSelectAll}
-                  />
-                  <span className="text-sm text-gray-600">
-                    Seleccionar todas las solicitudes pendientes (
-                    {filteredSolicitudes.filter((s) => s.estado === "PENDIENTE").length})
-                  </span>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                {filteredSolicitudes.map((solicitud) => (
-                  <Card key={solicitud.id} className="border-l-4 border-l-blue-400 hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-3 flex-1">
-                          {solicitud.estado === "PENDIENTE" && (
-                            <Checkbox
-                              checked={selectedSolicitudes.includes(solicitud.id)}
-                              onCheckedChange={(checked) => handleSelectSolicitud(solicitud.id, checked as boolean)}
-                              className="mt-1"
-                            />
-                          )}
-
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-3">
-                              <h4 className="text-lg font-semibold text-gray-900">{solicitud.codigo}</h4>
-                              {getStatusBadge(solicitud.estado, solicitud.prioridad)}
-                              <Badge className="bg-blue-100 text-blue-800">
-                                {solicitud.numeroAprendices} aprendices
-                              </Badge>
-                              {solicitud.tiempoRespuesta && solicitud.tiempoRespuesta > 5 && (
-                                <Badge className="bg-orange-100 text-orange-800">
-                                  {solicitud.tiempoRespuesta} días
-                                </Badge>
-                              )}
-                            </div>
-
-                            <h5 className="text-md font-medium text-gray-800 mb-2">{solicitud.programa.nombre}</h5>
-
-                            <div className="grid md:grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
-                              <div className="flex items-center space-x-2">
-                                <Users className="h-4 w-4" />
-                                <span>Instructor: {solicitud.instructor.name}</span>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <Building className="h-4 w-4" />
-                                <span>Empresa: {solicitud.nombreEmpresa}</span>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <Calendar className="h-4 w-4" />
-                                <span>Inicio: {format(new Date(solicitud.fechaInicio), "PPP", { locale: es })}</span>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <Clock className="h-4 w-4" />
-                                <span>Duración: {solicitud.programa.duracionHoras}h</span>
-                              </div>
-                            </div>
-
-                            {solicitud.justificacion && (
-                              <div className="bg-gray-50 rounded-lg p-4">
-                                <h6 className="font-medium text-gray-900 mb-2">Justificación:</h6>
-                                <p className="text-sm text-gray-700 line-clamp-3">{solicitud.justificacion}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col space-y-2 ml-4">
-                          {solicitud.estado === "PENDIENTE" && (
-                            <>
-                              <Button
-                                onClick={() => handleAprobarSolicitud(solicitud.id)}
-                                className="bg-green-600 hover:bg-green-700 text-white"
-                                size="sm"
-                              >
-                                <CheckCircle className="h-4 w-4 mr-1" />
-                                Aprobar
-                              </Button>
-                              <Button
-                                onClick={() => handleRechazarSolicitud(solicitud.id)}
-                                variant="outline"
-                                className="border-red-600 text-red-600 hover:bg-red-50"
-                                size="sm"
-                              >
-                                <XCircle className="h-4 w-4 mr-1" />
-                                Rechazar
-                              </Button>
-                            </>
-                          )}
-                          <Button variant="outline" size="sm" onClick={() => handleVerDetalles(solicitud.id)}>
-                            <Eye className="h-4 w-4 mr-1" />
-                            Ver Detalles
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {filteredSolicitudes.length === 0 && !loadingSolicitudes && (
-                  <div className="text-center py-12">
-                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <FileText className="h-12 w-12 text-gray-400" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                      {searchTerm || estadoFilter !== "all" ? "No se encontraron solicitudes" : "No hay solicitudes"}
-                    </h3>
-                    <p className="text-gray-600">
-                      {searchTerm || estadoFilter !== "all"
-                        ? "Intenta ajustar los filtros de búsqueda"
-                        : "Las solicitudes de formación aparecerán aquí cuando los instructores las envíen"}
-                    </p>
-                  </div>
-                )}
-
-                {loadingSolicitudes && (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
-                    <p className="text-gray-600 mt-2">Cargando solicitudes...</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Pestaña 2: Registrar Instructores */}
-        <TabsContent value="registro" className="space-y-6 mt-6">
-          {showRegistroForm ? (
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold">Registrar Nuevo Instructor</h3>
-                <Button variant="outline" onClick={() => setShowRegistroForm(false)}>
-                  Volver al Dashboard
-                </Button>
-              </div>
-              <RegistrarInstructorForm />
-            </div>
-          ) : (
+        <TabsContent value="resumen" className="space-y-6 mt-6">
+          <div className="grid lg:grid-cols-2 gap-8">
+            {/* Métricas de Rendimiento */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <UserPlus className="h-5 w-5 text-green-600" />
-                  <span>Registrar Nuevo Instructor</span>
+                  <Activity className="h-5 w-5 text-green-600" />
+                  <span>Métricas de Rendimiento</span>
                 </CardTitle>
-                <CardDescription>Registra instructores para tu centro de formación</CardDescription>
+                <CardDescription>Indicadores clave de tu gestión como coordinador</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="text-center py-8">
-                  <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <UserPlus className="h-12 w-12 text-green-600" />
+              <CardContent className="space-y-6">
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Tasa de Aprobación</span>
+                    <span className="font-medium">{estadisticas.tasaAprobacion}%</span>
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Formulario de Registro</h3>
-                  <p className="text-gray-600 mb-6">Registra nuevos instructores para tu centro de formación</p>
-                  <Button
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                    onClick={() => setShowRegistroForm(true)}
-                  >
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Abrir Formulario de Registro
-                  </Button>
+                  <Progress value={estadisticas.tasaAprobacion} className="h-3" />
+                  <p className="text-xs text-gray-500 mt-1">Meta: 85%</p>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Tiempo de Respuesta</span>
+                    <span className="font-medium">{estadisticas.tiempoPromedioRespuesta} días</span>
+                  </div>
+                  <Progress
+                    value={Math.max(
+                      0,
+                      100 - (estadisticas.tiempoPromedioRespuesta / estadisticas.metaTiempoRespuesta) * 100,
+                    )}
+                    className="h-3"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Meta: ≤ {estadisticas.metaTiempoRespuesta} días</p>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Instructores Activos</span>
+                    <span className="font-medium">
+                      {estadisticas.instructoresActivos}/{estadisticas.totalInstructores}
+                    </span>
+                  </div>
+                  <Progress
+                    value={
+                      estadisticas.totalInstructores > 0
+                        ? (estadisticas.instructoresActivos / estadisticas.totalInstructores) * 100
+                        : 0
+                    }
+                    className="h-3"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Participación en formación</p>
                 </div>
               </CardContent>
             </Card>
-          )}
-        </TabsContent>
 
-        {/* Pestaña 3: Ver Instructores */}
-        <TabsContent value="instructores" className="space-y-6 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Users className="h-5 w-5 text-blue-600" />
-                <span>Información de Instructores</span>
-              </CardTitle>
-              <CardDescription>Consulta la información detallada de los instructores de tu centro</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* Barra de Búsqueda */}
-              <div className="mb-6">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Buscar instructor por nombre, cédula o especialidad..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
+            {/* Acciones Rápidas */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Acciones Rápidas</CardTitle>
+                <CardDescription>Herramientas de gestión más utilizadas</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Button asChild className="w-full justify-start bg-green-600 hover:bg-green-700 text-white">
+                  <Link href="/solicitudes-pendientes">
+                    <Eye className="h-4 w-4 mr-2" />
+                    Revisar Solicitudes Pendientes ({estadisticas.solicitudesPendientes})
+                  </Link>
+                </Button>
 
-              {/* Lista de Instructores */}
-              <div className="space-y-4">
-                {filteredInstructores.map((instructor) => (
-                  <Card key={instructor.id} className="border-l-4 border-l-blue-400 hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-3">
-                            <h4 className="text-lg font-semibold text-gray-900">{instructor.name}</h4>
-                            <Badge className="bg-green-100 text-green-800">✅ {instructor.estado}</Badge>
-                            <Badge className="bg-blue-100 text-blue-800">{instructor.especialidad}</Badge>
-                            {instructor.rendimiento && (
-                              <Badge
-                                className={`${instructor.rendimiento >= 90 ? "bg-green-100 text-green-800" : instructor.rendimiento >= 80 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}
-                              >
-                                {instructor.rendimiento}% rendimiento
-                              </Badge>
-                            )}
-                          </div>
+                <Button asChild variant="outline" className="w-full justify-start bg-transparent">
+                  <Link href="/crear-usuario">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Registrar Nuevo Instructor
+                  </Link>
+                </Button>
 
-                          <div className="grid md:grid-cols-3 gap-4 text-sm text-gray-600 mb-4">
-                            <div className="flex items-center space-x-2">
-                              <Mail className="h-4 w-4" />
-                              <span>{instructor.email}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Phone className="h-4 w-4" />
-                              <span>{instructor.telefono}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Calendar className="h-4 w-4" />
-                              <span>
-                                Desde{" "}
-                                {instructor.fechaIngreso
-                                  ? format(new Date(instructor.fechaIngreso), "PPP", { locale: es })
-                                  : "N/A"}
-                              </span>
-                            </div>
-                          </div>
+                <Button asChild variant="outline" className="w-full justify-start bg-transparent">
+                  <Link href="/reportes">
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    Generar Reportes
+                  </Link>
+                </Button>
 
-                          {/* Fichas Asignadas */}
-                          {instructor.fichasAsignadas.length > 0 && (
-                            <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                              <h5 className="font-medium text-gray-900 mb-2 flex items-center space-x-2">
-                                <FileText className="h-4 w-4" />
-                                <span>Fichas Asignadas ({instructor.fichasAsignadas.length})</span>
-                              </h5>
-                              <div className="space-y-2">
-                                {instructor.fichasAsignadas.map((ficha, index) => (
-                                  <div
-                                    key={index}
-                                    className="flex items-center justify-between text-sm bg-white rounded p-2"
-                                  >
-                                    <div>
-                                      <span className="font-medium text-gray-900">#{ficha.numero}</span>
-                                      <span className="text-gray-600 ml-2">{ficha.programa}</span>
-                                    </div>
-                                    <Badge variant="outline">{ficha.aprendices} aprendices</Badge>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                <Button asChild variant="outline" className="w-full justify-start bg-transparent">
+                  <Link href="/cursos">
+                    <BookOpen className="h-4 w-4 mr-2" />
+                    Gestionar Programas
+                  </Link>
+                </Button>
 
-                          {/* Estadísticas del Instructor */}
-                          <div className="grid grid-cols-4 gap-4">
-                            <div className="bg-blue-50 rounded-lg p-3 text-center">
-                              <div className="text-lg font-bold text-blue-600">{instructor.fichasAsignadas.length}</div>
-                              <div className="text-xs text-gray-600">Fichas</div>
-                            </div>
-                            <div className="bg-green-50 rounded-lg p-3 text-center">
-                              <div className="text-lg font-bold text-green-600">
-                                {instructor.fichasAsignadas.reduce((sum, f) => sum + f.aprendices, 0)}
-                              </div>
-                              <div className="text-xs text-gray-600">Aprendices</div>
-                            </div>
-                            <div className="bg-purple-50 rounded-lg p-3 text-center">
-                              <div className="text-lg font-bold text-purple-600">{instructor.solicitudesFormacion}</div>
-                              <div className="text-xs text-gray-600">Solicitudes</div>
-                            </div>
-                            <div className="bg-amber-50 rounded-lg p-3 text-center">
-                              <div className="text-lg font-bold text-amber-600">{instructor.horasFormacion}h</div>
-                              <div className="text-xs text-gray-600">Formación</div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col space-y-2 ml-4">
-                          <Button variant="outline" size="sm">
-                            <Eye className="h-4 w-4 mr-1" />
-                            Ver Perfil
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Award className="h-4 w-4 mr-1" />
-                            Asignar Ficha
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {filteredInstructores.length === 0 && (
-                  <div className="text-center py-12">
-                    <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Users className="h-12 w-12 text-blue-600" />
+                {estadisticas.solicitudesUrgentes > 0 && (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-center space-x-2 text-red-800">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span className="font-medium">Atención Requerida</span>
                     </div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No se encontraron instructores</h3>
-                    <p className="text-gray-600">
-                      {searchTerm ? "Intenta con otros términos de búsqueda" : "Aún no hay instructores registrados"}
+                    <p className="text-sm text-red-700 mt-1">
+                      {estadisticas.solicitudesUrgentes} solicitudes llevan más de 7 días pendientes
                     </p>
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="solicitudes" className="space-y-4 mt-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Solicitudes Recientes</h3>
+            <Button asChild variant="outline">
+              <Link href="/solicitudes-pendientes">Ver Todas</Link>
+            </Button>
+          </div>
+
+          {solicitudesRecientes.length === 0 ? (
+            <Card className="p-8 text-center">
+              <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No hay solicitudes recientes</h3>
+              <p className="text-gray-600">Las nuevas solicitudes aparecerán aquí.</p>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {solicitudesRecientes.map((solicitud) => (
+                <Card key={solicitud.id} className="border-l-4 border-l-green-400 hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-lg font-semibold text-gray-900">{solicitud.codigo}</h4>
+                          {getStatusBadge(solicitud.estado, solicitud.prioridad)}
+                        </div>
+
+                        <p className="text-gray-600">{solicitud.programa}</p>
+
+                        <div className="flex items-center space-x-4 text-sm text-gray-500">
+                          <span>Instructor: {solicitud.instructor}</span>
+                          <span>•</span>
+                          <span>{new Date(solicitud.fechaSolicitud).toLocaleDateString("es-CO")}</span>
+                        </div>
+                      </div>
+
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/solicitudes/${solicitud.id}`}>
+                          <Eye className="h-4 w-4 mr-1" />
+                          Ver
+                        </Link>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="instructores" className="space-y-4 mt-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Resumen de Instructores</h3>
+            <Button asChild variant="outline">
+              <Link href="/crear-usuario">
+                <Plus className="h-4 w-4 mr-2" />
+                Registrar Instructor
+              </Link>
+            </Button>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {instructoresResumen.map((instructor) => (
+              <Card key={instructor.id} className="hover:shadow-lg transition-shadow">
+                <CardContent className="p-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-gray-900">{instructor.name}</h4>
+                      <p className="text-sm text-gray-600">{instructor.email}</p>
+                    </div>
+
+                    <div className="space-y-2 text-sm text-gray-600">
+                      <div className="flex items-center justify-between">
+                        <span>Solicitudes activas:</span>
+                        <Badge variant="outline">{instructor.solicitudesActivas}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Horas de formación:</span>
+                        <span className="font-medium">{instructor.horasFormacion}h</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Última actividad:</span>
+                        <span>{new Date(instructor.ultimaActividad).toLocaleDateString("es-CO")}</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="perfil" className="space-y-6 mt-6">
+          <div className="grid lg:grid-cols-2 gap-8">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <User className="h-5 w-5 text-green-600" />
+                  <span>Información Personal</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Nombre Completo</label>
+                    <p className="text-gray-900">{user?.name}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Cédula</label>
+                    <p className="text-gray-900">{user?.cedula}</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Centro de Formación</label>
+                  <p className="text-gray-900">{user?.centro?.nombre}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Correo Electrónico</label>
+                  <p className="text-gray-900">{user?.email}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Rol</label>
+                  <Badge className="bg-blue-100 text-blue-800">Coordinador</Badge>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Especialidad</label>
+                  <p className="text-gray-900">{user?.especialidad || "No especificada"}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Estadísticas de Gestión</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Progreso Meta Mensual</span>
+                    <span>{getProgressPercentage().toFixed(0)}%</span>
+                  </div>
+                  <Progress value={getProgressPercentage()} className="h-3" />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {estadisticas.solicitudesProcesadasMes} de {estadisticas.metaMensualSolicitudes} solicitudes
+                    procesadas
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">{estadisticas.solicitudesAprobadas}</div>
+                    <div className="text-sm text-gray-600">Aprobadas</div>
+                  </div>
+                  <div className="text-center p-4 bg-blue-50 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">{estadisticas.totalInstructores}</div>
+                    <div className="text-sm text-gray-600">Instructores</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center p-4 bg-purple-50 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">{estadisticas.horasFormacionAprobadas}</div>
+                    <div className="text-sm text-gray-600">Horas Formación</div>
+                  </div>
+                  <div className="text-center p-4 bg-amber-50 rounded-lg">
+                    <div className="text-2xl font-bold text-amber-600">{estadisticas.tiempoPromedioRespuesta}d</div>
+                    <div className="text-sm text-gray-600">Tiempo Respuesta</div>
+                  </div>
+                </div>
+
+                <Button asChild className="w-full bg-green-600 hover:bg-green-700 text-white">
+                  <Link href="/reportes">
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    Ver Reportes Detallados
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
-
-      <SolicitudDetalleModal
-        solicitudId={selectedSolicitudId}
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        onApprove={handleModalApprove}
-        onReject={handleModalReject}
-        userRole={user?.role}
-      />
     </div>
   )
 }

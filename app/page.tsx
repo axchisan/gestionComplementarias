@@ -6,7 +6,7 @@ import { Features } from "@/components/features"
 import { Footer } from "@/components/footer"
 import { AdminDashboard } from "@/components/admin-dashboard"
 import { InstructorDashboard } from "@/components/instructor-dashboard"
-import { SolicitudesPendientes } from "@/components/solicitudes-pendientes"
+import { CoordinadorDashboard } from "@/components/coordinador-dashboard"
 import { useAuth } from "@/lib/auth-context"
 
 export default function HomePage() {
@@ -56,12 +56,12 @@ export default function HomePage() {
           {user.role === "COORDINADOR" && (
             <>
               <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">Panel de Coordinación</h1>
+                <h1 className="text-3xl font-bold text-gray-900">Dashboard de Coordinación</h1>
                 <p className="text-gray-600 mt-2">
-                  Gestiona las solicitudes de formación de tu centro y supervisa el progreso de los instructores.
+                  Panel de control ejecutivo para la gestión integral de formación complementaria de tu centro.
                 </p>
               </div>
-              <SolicitudesPendientes />
+              <CoordinadorDashboard />
             </>
           )}
 

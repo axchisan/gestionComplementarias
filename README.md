@@ -1,276 +1,298 @@
-# Sistema de Formación Complementaria SENA
+# Sistema de Gestión de Formación Complementaria SENA
 
-Sistema web completo para la gestión automatizada de solicitudes de formación complementaria para instructores del SENA.
+Sistema web completo desarrollado en Next.js para la gestión automatizada de solicitudes de formación complementaria para instructores del SENA (Servicio Nacional de Aprendizaje).
 
 ## 🎯 Objetivo Principal
 
-Optimizar el proceso de solicitud de formación complementaria mediante un sistema web que automatice la creación, gestión y exportación de fichas de caracterización, mejorando la eficiencia y reduciendo errores manuales.
+Optimizar el proceso de solicitud de formación complementaria mediante un sistema web que automatice la creación, gestión y exportación de fichas de caracterización, mejorando la eficiencia administrativa y reduciendo errores manuales en el proceso educativo.
 
-## 🏗️ Arquitectura del Proyecto
+## 🏗️ Arquitectura del Sistema
 
+### Stack Tecnológico
+- **Frontend & Backend**: Next.js 14 (App Router)
+- **Base de Datos**: PostgreSQL con Prisma ORM
+- **Autenticación**: JWT con Context API
+- **UI/UX**: Tailwind CSS + Radix UI + shadcn/ui
+- **Contenedores**: Docker + Docker Compose
+- **Cache**: Redis para sesiones y optimización
+
+### Estructura del Proyecto
 \`\`\`
-├── frontend/                         # 🔵 Frontend con React + Tailwind CSS
-│   ├── public/                      # Archivos públicos: manifest.json, favicon, etc.
-│   │   ├── manifest.json            # Para PWA
-│   │   └── service-worker.js        # Workbox PWA
-│   │
-│   ├── src/
-│   │   ├── assets/                 # Imágenes, logos del SENA
-│   │   ├── components/             # Componentes reutilizables (Header, Input, etc.)
-│   │   ├── pages/                  # Páginas del sistema
-│   │   │   ├── Login.jsx
-│   │   │   ├── Dashboard.jsx
-│   │   │   ├── CrearFicha.jsx
-│   │   │   └── Historial.jsx
-│   │   ├── services/              # Lógica para llamar al backend (axios)
-│   │   │   ├── authService.js
-│   │   │   └── fichaService.js
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   └── index.css              # Tailwind importado aquí
-│   │
-│   └── package.json               # Dependencias del frontend (React, Tailwind, etc.)
-│
-├── .gitignore                      # Ignorar node_modules, .env, etc.
-├── README.md                       # Explicación del proyecto
-└── docker-compose.yml
+├── app/                           # Next.js App Router
+│   ├── api/                      # API Routes (Backend)
+│   │   ├── auth/                 # Autenticación JWT
+│   │   ├── solicitudes/          # Gestión de solicitudes
+│   │   ├── usuarios/             # Gestión de usuarios
+│   │   └── reportes/             # Generación de reportes
+│   ├── (dashboard)/              # Rutas protegidas
+│   │   ├── admin/                # Panel administrativo
+│   │   ├── coordinador/          # Panel de coordinación
+│   │   └── instructor/           # Panel de instructor
+│   ├── auth/                     # Páginas de autenticación
+│   └── globals.css               # Estilos globales
+├── components/                    # Componentes React reutilizables
+│   ├── ui/                       # Componentes base (shadcn/ui)
+│   ├── forms/                    # Formularios especializados
+│   ├── dashboards/               # Dashboards por rol
+│   └── layout/                   # Componentes de layout
+├── lib/                          # Utilidades y configuraciones
+│   ├── auth-context.tsx          # Context de autenticación
+│   ├── prisma.ts                 # Cliente de Prisma
+│   └── utils.ts                  # Utilidades generales
+├── prisma/                       # Esquema y migraciones de BD
+│   ├── schema.prisma             # Modelo de datos
+│   └── migrations/               # Migraciones de BD
+├── public/                       # Archivos estáticos
+├── Dockerfile                    # Configuración de contenedor
+├── docker-compose.yml            # Orquestación de servicios
+└── nginx/                        # Configuración de proxy reverso
 \`\`\`
 
 ## ✨ Características Principales
 
-### 📱 Frontend React + PWA
-- **React 18** con hooks modernos y Context API
-- **Tailwind CSS** con tema personalizado del SENA
-- **PWA completa** con Service Worker y manifest
-- **Responsive design** optimizado para móviles
-- **Componentes reutilizables** y modulares
+### 🔐 Sistema de Autenticación
+- **Autenticación JWT** con roles diferenciados (Instructor, Coordinador, Admin)
+- **Gestión de sesiones** segura con localStorage y Context API
+- **Control de acceso granular** por funcionalidades y rutas
+- **Middleware de autenticación** para protección de API routes
 
-### 🎨 Diseño SENA
-- **Colores oficiales**: Verde SENA (#16a34a) como primario
-- **Tipografía**: Inter para legibilidad óptima
-- **Iconografía**: Lucide React para consistencia
-- **Animaciones suaves** y transiciones profesionales
+### 👥 Gestión de Usuarios por Roles
 
-### 🔐 Autenticación y Seguridad
-- **Autenticación JWT** con roles diferenciados
-- **Interceptores Axios** para manejo automático de tokens
-- **Gestión de sesiones** segura con localStorage
-- **Control de acceso** granular por funcionalidades
-
-### 📊 Gestión de Fichas
-- **Creación paso a paso** con validaciones
-- **Estados de seguimiento** (borrador, pendiente, aprobada, rechazada)
-- **Historial completo** con filtros avanzados
-- **Exportación PDF/Excel** con formatos oficiales
-
-## 👥 Roles del Sistema
-
-### 👨‍🏫 Instructor
-- ✅ Crear y gestionar fichas de formación
-- ✅ Ver historial personal de solicitudes
-- ✅ Exportar fichas individuales a PDF
+#### 👨‍🏫 Instructor
+- ✅ Crear y gestionar solicitudes de formación complementaria
+- ✅ Ver historial personal de solicitudes con filtros
+- ✅ Exportar fichas individuales a PDF/Excel
 - ✅ Recibir notificaciones de cambios de estado
+- ✅ Gestionar horarios y programación de cursos
 
-### 👨‍💼 Coordinador
-- ✅ Aprobar/rechazar fichas de su centro
-- ✅ Registrar nuevos instructores
-- ✅ Ver información completa de instructores
-- ✅ Asignar fichas específicas a instructores
+#### 👨‍💼 Coordinador
+- ✅ Aprobar/rechazar solicitudes de su centro de formación
+- ✅ Registrar y gestionar instructores del centro
+- ✅ Ver información completa y estadísticas de instructores
+- ✅ Asignar fichas específicas y gestionar recursos
+- ✅ Generar reportes de gestión por centro
 
-### 👨‍💻 Administrador
-- ✅ Gestión completa de usuarios
-- ✅ Aprobación final de solicitudes
-- ✅ Reportes y estadísticas del sistema
-- ✅ Configuración y mantenimiento
+#### 👨‍💻 Administrador
+- ✅ Gestión completa de usuarios y centros de formación
+- ✅ Aprobación final de solicitudes del sistema
+- ✅ Reportes y estadísticas globales del sistema
+- ✅ Configuración y mantenimiento del sistema
+- ✅ Gestión de programas de formación y competencias
+
+### 📊 Gestión Integral de Solicitudes
+- **Flujo completo de solicitudes** desde borrador hasta aprobación final
+- **Estados de seguimiento** (Borrador, Pendiente, En Revisión, Aprobada, Rechazada)
+- **Validaciones automáticas** de requisitos y documentación
+- **Generación automática de códigos** de solicitud y fichas
+- **Historial completo** con trazabilidad de cambios
+- **Notificaciones en tiempo real** para todos los actores
+
+### 📋 Características Específicas SENA
+- **Gestión de centros de formación** por regiones
+- **Catálogo de programas** con competencias y resultados de aprendizaje
+- **Modalidades de formación** (Presencial, Virtual, Mixta, Desescolarizada)
+- **Programas especiales** (Emprendimiento, Bilingüismo, Posconflicto, etc.)
+- **Horarios detallados** con flexibilidad para cambios
+- **Integración con empresas** y entidades solicitantes
 
 ## 🚀 Instalación y Configuración
 
 ### Prerrequisitos
 - Node.js 18 o superior
-- npm o yarn
+- Docker y Docker Compose
+- PostgreSQL (externo o contenedor separado)
 - Git
 
-### Instalación del Frontend
+### Configuración de Variables de Entorno
 
+1. **Copiar archivo de ejemplo**:
 \`\`\`bash
-# Clonar el repositorio
-git clone [URL_DEL_REPOSITORIO]
-cd sena-formacion-complementaria
-
-# Navegar al frontend
-cd frontend
-
-# Instalar dependencias
-npm install
-
-# Configurar variables de entorno
-cp .env.example .env.local
-
-# Iniciar servidor de desarrollo
-npm run dev
+cp .env.example .env
 \`\`\`
 
-### Variables de Entorno
-
-Crear archivo \`.env.local\` en la carpeta frontend:
-
+2. **Configurar variables principales**:
 \`\`\`env
-VITE_API_URL=http://localhost:3000/api
-VITE_APP_NAME=SENA Formación Complementaria
-VITE_APP_VERSION=1.0.0
+# Base de datos externa (ya configurada en tu VPS)
+DATABASE_URL="postgresql://usuario:password@host:puerto/database"
+
+# Autenticación
+JWT_SECRET="tu-clave-secreta-jwt-muy-segura"
+NEXTAUTH_SECRET="tu-clave-nextauth-muy-segura"
+NEXTAUTH_URL="https://tu-dominio.com"
+
+# Redis
+REDIS_PASSWORD="tu-password-redis"
+
+# Configuración de producción
+NODE_ENV="production"
 \`\`\`
 
-### Scripts Disponibles
+### Despliegue con Docker Compose
 
+1. **Construcción y despliegue**:
 \`\`\`bash
-# Frontend
-npm run dev          # Servidor de desarrollo
-npm run build        # Construir para producción
-npm run preview      # Vista previa de producción
-npm run lint         # Verificar código
-npm run build:pwa    # Construir con PWA optimizada
+# Construcción de la imagen
+docker-compose build
+
+# Despliegue en producción
+docker-compose up -d
+
+# Con Nginx (opcional)
+docker-compose --profile production up -d
 \`\`\`
 
-## 🔑 Usuarios de Demostración
+2. **Verificación del despliegue**:
+\`\`\`bash
+# Verificar contenedores
+docker-compose ps
 
-### Credenciales de Acceso
+# Ver logs
+docker-compose logs -f app
 
-| Rol | Email | Contraseña | Descripción |
-|-----|-------|------------|-------------|
-| **Instructor** | instructor@sena.edu.co | 123456 | Crear y gestionar fichas |
-| **Coordinador** | coordinador@sena.edu.co | 123456 | Aprobar fichas y gestionar instructores |
-| **Administrador** | admin@sena.edu.co | 123456 | Administración completa |
-
-## 🛠️ Tecnologías Utilizadas
-
-### Frontend
-- **React 18.2** - Framework principal
-- **Vite 4.5** - Build tool y dev server
-- **React Router DOM 6.20** - Navegación SPA
-- **Tailwind CSS 3.3** - Framework CSS
-- **Axios 1.6** - Cliente HTTP
-- **Lucide React** - Iconografía
-- **React Hook Form** - Gestión de formularios
-- **React Hot Toast** - Notificaciones
-
-### PWA y Optimización
-- **Vite PWA Plugin** - Service Worker automático
-- **Workbox** - Estrategias de cache
-- **Web App Manifest** - Instalación nativa
-
-### Desarrollo
-- **ESLint** - Linting de código
-- **PostCSS** - Procesamiento CSS
-- **Autoprefixer** - Compatibilidad CSS
-
-## 📱 Funcionalidades PWA
-
-### Instalación Nativa
-- **Instalable** en dispositivos móviles y escritorio
-- **Iconos adaptativos** para diferentes plataformas
-- **Splash screen** personalizada
-- **Shortcuts** para acciones rápidas
-
-### Funcionalidad Offline
-- **Cache inteligente** de recursos estáticos
-- **Datos offline** para consultas básicas
-- **Sincronización automática** al recuperar conexión
-- **Notificaciones push** (preparado para implementar)
-
-## 🎨 Guía de Estilos
-
-### Colores Principales
-\`\`\`css
-:root {
-  --sena-green: #16a34a;        /* Verde principal */
-  --sena-green-light: #22c55e;  /* Verde claro */
-  --sena-green-dark: #15803d;   /* Verde oscuro */
-  --sena-orange: #f97316;       /* Naranja SENA */
-  --sena-blue: #0ea5e9;         /* Azul complementario */
-}
+# Health check
+curl http://localhost:3000/health
 \`\`\`
 
-### Componentes Personalizados
-- **btn-sena**: Botón principal con estilo SENA
-- **card-sena**: Tarjeta con sombra y bordes redondeados
-- **input-sena**: Input con focus verde y validación
-- **badge-\***: Estados con colores semánticos
+### Configuración de Base de Datos
 
-## 📊 Métricas y Rendimiento
+1. **Generar cliente Prisma**:
+\`\`\`bash
+docker-compose exec app npx prisma generate
+\`\`\`
 
-### Optimizaciones Implementadas
-- **Code splitting** automático por rutas
-- **Lazy loading** de componentes pesados
-- **Compresión de imágenes** automática
-- **Tree shaking** para bundle mínimo
-- **CSS purging** para estilos no utilizados
+2. **Ejecutar migraciones**:
+\`\`\`bash
+docker-compose exec app npx prisma migrate deploy
+\`\`\`
 
-### Métricas Objetivo
-- **First Contentful Paint**: < 1.5s
-- **Largest Contentful Paint**: < 2.5s
-- **Time to Interactive**: < 3.5s
-- **Cumulative Layout Shift**: < 0.1
+3. **Poblar datos iniciales** (opcional):
+\`\`\`bash
+docker-compose exec app npx prisma db seed
+\`\`\`
+
+## 🔧 Configuración para Coolify
+
+### Configuración de Servicio en Coolify
+
+1. **Crear nuevo servicio**:
+   - Tipo: Docker Compose
+   - Repositorio: Tu repositorio Git
+   - Branch: main/production
+
+2. **Variables de entorno en Coolify**:
+\`\`\`env
+DATABASE_URL=postgresql://usuario:password@tu-db-host:5432/sena_db
+JWT_SECRET=tu-jwt-secret-muy-seguro
+NEXTAUTH_SECRET=tu-nextauth-secret-muy-seguro
+NEXTAUTH_URL=https://tu-dominio.com
+REDIS_PASSWORD=tu-redis-password
+NODE_ENV=production
+\`\`\`
+
+3. **Configuración de dominio**:
+   - Asignar dominio personalizado
+   - Configurar SSL automático
+   - Configurar redirects HTTP → HTTPS
+
+### Optimizaciones para Producción
+
+1. **Recursos recomendados**:
+   - CPU: 2 vCPUs mínimo
+   - RAM: 2GB mínimo
+   - Almacenamiento: 20GB mínimo
+
+2. **Monitoreo**:
+   - Health checks configurados
+   - Logs centralizados
+   - Métricas de rendimiento
+
+## 📊 Base de Datos
+
+### Modelos Principales
+- **Users**: Gestión de usuarios con roles
+- **Centros**: Centros de formación SENA
+- **Programas**: Catálogo de programas de formación
+- **Solicitudes**: Solicitudes de formación complementaria
+- **HorarioDetallado**: Programación específica de cursos
+- **Notificaciones**: Sistema de notificaciones
+
+### Relaciones Clave
+- Usuario → Centro (Many-to-One)
+- Solicitud → Usuario + Programa (Many-to-One)
+- Programa → Centro + Competencias (One-to-Many)
+- Horarios → Solicitud (One-to-Many)
 
 ## 🔒 Seguridad
 
 ### Medidas Implementadas
-- **Sanitización** de inputs del usuario
-- **Validación** en cliente y servidor
-- **Headers de seguridad** configurados
-- **HTTPS** obligatorio en producción
+- **Autenticación JWT** con expiración configurable
+- **Validación de entrada** con Zod schemas
 - **Rate limiting** en endpoints críticos
+- **Headers de seguridad** configurados
+- **CORS** configurado para dominios específicos
+- **Sanitización** de datos de usuario
 
-### Gestión de Tokens
-- **JWT** con expiración configurable
-- **Refresh tokens** para sesiones largas
-- **Logout automático** por inactividad
-- **Revocación** de tokens comprometidos
+### Configuración de Seguridad
+- HTTPS obligatorio en producción
+- Tokens con rotación automática
+- Sesiones con timeout configurable
+- Logs de auditoría para acciones críticas
 
-## 🚀 Despliegue
+## 📈 Monitoreo y Mantenimiento
 
-### Preparación para Producción
+### Health Checks
+- Endpoint `/health` para verificación de estado
+- Verificación de conectividad a base de datos
+- Monitoreo de memoria y CPU
+
+### Logs
+- Logs estructurados en formato JSON
+- Rotación automática de logs
+- Integración con sistemas de monitoreo
+
+### Backup y Recuperación
+- Backup automático de base de datos (configurar externamente)
+- Versionado de código con Git
+- Procedimientos de rollback documentados
+
+## 🤝 Contribución y Desarrollo
+
+### Flujo de Desarrollo
+1. Fork del repositorio
+2. Crear rama feature (`git checkout -b feature/nueva-funcionalidad`)
+3. Desarrollo y testing local
+4. Commit con mensajes descriptivos
+5. Push y creación de Pull Request
+
+### Comandos de Desarrollo
 \`\`\`bash
-# Construir aplicación
+# Desarrollo local
+npm run dev
+
+# Build de producción
 npm run build
 
-# Los archivos se generan en dist/
-# Subir a servidor web (Nginx, Apache, etc.)
-\`\`\`
+# Linting
+npm run lint
 
-### Configuración del Servidor
-- **Servidor web**: Nginx o Apache
-- **HTTPS**: Certificado SSL obligatorio
-- **Compresión**: Gzip habilitado
-- **Cache**: Headers apropiados para recursos estáticos
+# Testing (cuando se implemente)
+npm run test
+\`\`\`
 
 ## 📞 Soporte y Contacto
 
+### Información del Sistema
+- **Versión**: 1.0.0
+- **Desarrollado para**: SENA - Servicio Nacional de Aprendizaje
+- **Tecnología**: Next.js 14 + PostgreSQL + Docker
+
 ### Soporte Técnico
-- **Email**: soporte@sena.edu.co
-- **Teléfono**: +57 (1) 546 1500
-- **Horario**: Lunes a Viernes, 8:00 AM - 6:00 PM
-
-### Documentación Adicional
-- **Manual de Usuario**: [Enlace a documentación]
-- **API Documentation**: [Enlace a API docs]
-- **Guía de Desarrollo**: [Enlace a dev guide]
-
-## 📄 Licencia
-
-Este proyecto está desarrollado para el SENA (Servicio Nacional de Aprendizaje) y está sujeto a sus políticas institucionales y términos de uso.
-
-## 🤝 Contribución
-
-Para contribuir al proyecto:
-
-1. Fork el repositorio
-2. Crear rama feature (\`git checkout -b feature/nueva-funcionalidad\`)
-3. Commit cambios (\`git commit -am 'Agregar nueva funcionalidad'\`)
-4. Push a la rama (\`git push origin feature/nueva-funcionalidad\`)
-5. Crear Pull Request
+- **Documentación**: Este README y comentarios en código
+- **Issues**: Usar el sistema de issues de Git
+- **Logs**: Revisar logs de contenedores para debugging
 
 ---
 
 **Desarrollado con ❤️ para el SENA - Servicio Nacional de Aprendizaje**
 
-*Sistema de Formación Complementaria v1.0.0*
+*Sistema de Gestión de Formación Complementaria v1.0.0*

@@ -23,8 +23,23 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sena-gestion.rule=Host(`gestioncomplementarias.axchisan.com`)"
+      - "traefik.http.routers.sena-gestion.entrypoints=websecure"
+      - "traefik.http.routers.sena-gestion.tls=true"
+      - "traefik.http.routers.sena-gestion.tls.certresolver=letsencrypt"
+      - "traefik.http.services.sena-gestion.loadbalancer.server.port=3000"
+      - "traefik.http.routers.sena-gestion-http.rule=Host(`gestioncomplementarias.axchisan.com`)"
+      - "traefik.http.routers.sena-gestion-http.entrypoints=web"
+      - "traefik.http.routers.sena-gestion-http.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
     networks:
       - sena-network
+      - coolify
+
 networks:
   sena-network:
     driver: bridge
+  coolify:
+    external: true

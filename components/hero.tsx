@@ -1,8 +1,22 @@
+"use client"
+
 import { Button } from "@/components/ui/button"
 import { ArrowRight, FileText, Users, Clock } from "lucide-react"
-import Link from "next/link"
+import { useAuth } from "@/lib/auth-context"
+import { useRouter } from "next/navigation"
 
 export function Hero() {
+  const { isAuthenticated } = useAuth()
+  const router = useRouter()
+
+  const handleProtectedNavigation = (path: string) => {
+    if (!isAuthenticated) {
+      router.push("/login")
+    } else {
+      router.push(path)
+    }
+  }
+
   return (
     <section className="relative bg-gradient-to-br from-green-50 to-green-100 py-20 lg:py-32">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -22,14 +36,21 @@ export function Hero() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button asChild size="lg" className="bg-green-600 hover:bg-green-700 text-white">
-                <Link href="/nueva-solicitud" className="flex items-center space-x-2">
-                  <span>Nueva Solicitud</span>
-                  <ArrowRight className="h-5 w-5" />
-                </Link>
+              <Button
+                size="lg"
+                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={() => handleProtectedNavigation("/nueva-solicitud")}
+              >
+                <span>Nueva Solicitud</span>
+                <ArrowRight className="h-5 w-5 ml-2" />
               </Button>
-              <Button asChild variant="outline" size="lg" className="border-green-600 text-green-600 hover:bg-green-50">
-                <Link href="/solicitudes">Ver Mis Solicitudes</Link>
+              <Button
+                variant="outline"
+                size="lg"
+                className="border-green-600 text-green-600 hover:bg-green-50 bg-transparent"
+                onClick={() => handleProtectedNavigation("/mis-solicitudes")}
+              >
+                Ver Mis Solicitudes
               </Button>
             </div>
 

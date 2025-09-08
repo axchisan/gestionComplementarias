@@ -20,7 +20,7 @@ export default function LoginPage() {
                   alt="SENA Logo"
                   width={80}
                   height={80}
-                  className="h-20 w-auto brightness-0 invert"
+                  
                 />
                 <div>
                   <h1 className="text-3xl font-bold">SENA</h1>
@@ -101,7 +101,7 @@ export default function LoginPage() {
         <div className="bg-gray-50 px-8 py-4 border-t border-gray-200">
           <div className="flex flex-col sm:flex-row justify-between items-center text-center sm:text-left">
             <p className="text-xs text-gray-500">
-              © 2024 SENA - Servicio Nacional de Aprendizaje. Todos los derechos reservados.
+              © 2025 SENA - Servicio Nacional de Aprendizaje. Todos los derechos reservados.
             </p>
             <div className="flex space-x-4 mt-2 sm:mt-0">
               <Link href="#" className="text-xs text-gray-500 hover:text-green-600 transition-colors">

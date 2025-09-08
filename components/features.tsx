@@ -1,5 +1,9 @@
+"use client"
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FileText, BarChart3, Shield, Smartphone, Download, History } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import { useRouter } from "next/navigation"
 
 const features = [
   {
@@ -36,6 +40,17 @@ const features = [
 ]
 
 export function Features() {
+  const { isAuthenticated } = useAuth()
+  const router = useRouter()
+
+  const handleGetStarted = () => {
+    if (!isAuthenticated) {
+      router.push("/login")
+    } else {
+      router.push("/nueva-solicitud")
+    }
+  }
+
   return (
     <section className="py-20 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -83,11 +98,11 @@ export function Features() {
             complementaria de manera eficiente.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors">
+            <button
+              className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+              onClick={handleGetStarted}
+            >
               Comenzar Ahora
-            </button>
-            <button className="border border-green-600 text-green-600 hover:bg-green-50 px-8 py-3 rounded-lg font-semibold transition-colors">
-              Ver Demo
             </button>
           </div>
         </div>

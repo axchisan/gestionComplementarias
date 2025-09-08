@@ -15,7 +15,6 @@ export function Footer() {
                 alt="SENA Logo"
                 width={48}
                 height={48}
-                className="h-12 w-auto brightness-0 invert"
               />
               <div>
                 <h3 className="text-xl font-bold">SENA</h3>
@@ -162,7 +161,7 @@ export function Footer() {
         <div className="border-t border-gray-800 pt-8">
           <div className="flex flex-col lg:flex-row justify-between items-center space-y-4 lg:space-y-0">
             <div className="text-sm text-gray-400 text-center lg:text-left">
-              <p>© 2024 SENA - Servicio Nacional de Aprendizaje.</p>
+              <p>© 2025 SENA - Servicio Nacional de Aprendizaje.</p>
               <p>Centro de Gestión Agroempresarial del Oriente. Todos los derechos reservados.</p>
             </div>
             <div className="flex flex-wrap justify-center lg:justify-end space-x-6 text-sm">
@@ -185,7 +184,7 @@ export function Footer() {
           <div className="mt-4 pt-4 border-t border-gray-800 text-center">
             <p className="text-xs text-gray-500">
               Sistema de Formación Complementaria v2.1.0 |<span className="text-green-400 ml-1">Estado: Operativo</span>{" "}
-              |<span className="ml-1">Última actualización: Enero 2024</span>
+              |<span className="ml-1">Última actualización: Septiembre 2025</span>
             </p>
           </div>
         </div>

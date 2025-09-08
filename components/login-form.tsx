@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
@@ -9,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2, Shield, Info } from "lucide-react"
+import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2, Shield } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 
 interface LoginData {
@@ -56,77 +55,8 @@ export function LoginForm() {
     }
   }
 
-  const fillDemoCredentials = (userType: "instructor" | "coordinador" | "admin") => {
-    const credentials = {
-      instructor: { email: "maria.gonzalez@sena.edu.co", password: "sena123" },
-      coordinador: { email: "luis.herrera@sena.edu.co", password: "sena123" },
-      admin: { email: "admin@sena.edu.co", password: "sena123" },
-    }
-
-    const cred = credentials[userType]
-    setFormData((prev) => ({
-      ...prev,
-      email: cred.email,
-      password: cred.password,
-    }))
-  }
-
   return (
     <div className="space-y-6">
-      {/* Demo Credentials Helper */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="p-4">
-          <div className="flex items-start space-x-3">
-            <Shield className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <h4 className="text-sm font-medium text-blue-900 mb-2">Credenciales de Demostración</h4>
-              <div className="grid grid-cols-1 gap-2">
-                <button
-                  type="button"
-                  onClick={() => fillDemoCredentials("instructor")}
-                  className="text-left text-xs text-blue-700 hover:text-blue-900 bg-white/50 hover:bg-white/80 p-2 rounded transition-colors"
-                >
-                  <div className="font-medium">👨‍🏫 Instructor</div>
-                  <div className="text-blue-600">maria.gonzalez@sena.edu.co / sena123</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillDemoCredentials("coordinador")}
-                  className="text-left text-xs text-blue-700 hover:text-blue-900 bg-white/50 hover:bg-white/80 p-2 rounded transition-colors"
-                >
-                  <div className="font-medium">👨‍💼 Coordinador</div>
-                  <div className="text-blue-600">luis.herrera@sena.edu.co / sena123</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillDemoCredentials("admin")}
-                  className="text-left text-xs text-blue-700 hover:text-blue-900 bg-white/50 hover:bg-white/80 p-2 rounded transition-colors"
-                >
-                  <div className="font-medium">⚙️ Administrador</div>
-                  <div className="text-blue-600">admin@sena.edu.co / sena123</div>
-                </button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Información para Instructores */}
-      <Card className="bg-amber-50 border-amber-200">
-        <CardContent className="p-4">
-          <div className="flex items-start space-x-3">
-            <Info className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <h4 className="text-sm font-medium text-amber-900 mb-1">¿Eres instructor y no tienes acceso?</h4>
-              <p className="text-xs text-amber-700">
-                Las credenciales de acceso son creadas por tu coordinador o administrador del centro. Si necesitas
-                acceso al sistema, contacta a tu coordinador académico.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />

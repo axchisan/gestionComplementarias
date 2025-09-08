@@ -54,7 +54,7 @@ export function Navigation() {
         ...baseItems,
         { href: "/mis-solicitudes", label: "Mis Solicitudes", icon: FileText },
         { href: "/nueva-solicitud", label: "Nueva Solicitud", icon: FileText },
-        { href: "/mi-perfil", label: "Mi Perfil", icon: User },
+        //{ href: "/mi-perfil", label: "Mi Perfil", icon: User },
       ]
     }
 

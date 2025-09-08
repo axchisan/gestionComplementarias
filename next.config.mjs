@@ -1,10 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  experimental: {
-    outputFileTracingRoot: process.cwd(),
-  },
-  
+  outputFileTracingRoot: process.cwd(),
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -14,7 +11,6 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  
   async headers() {
     return [
       {

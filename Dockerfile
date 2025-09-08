@@ -1,5 +1,5 @@
 # Multi-stage build for Next.js production
-FROM node:18-alpine AS base
+FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -12,7 +12,7 @@ RUN npm ci --only=production
 
 # Rebuild the source code only when needed
 FROM base AS builder
-RUN apk add --no-cache openssl  # Agrega esto para la detección de OpenSSL durante la compilación
+RUN apk add --no-cache openssl
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -26,7 +26,7 @@ RUN npm run build
 
 # Production image, copy all the files and run next
 FROM base AS runner
-RUN apk add --no-cache openssl  # Agrega esto para la detección de OpenSSL en tiempo de ejecución
+RUN apk add --no-cache openssl
 WORKDIR /app
 
 ENV NODE_ENV production
